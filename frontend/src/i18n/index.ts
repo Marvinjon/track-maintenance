@@ -1,3 +1,4 @@
+import { applyPlatformBranding } from "../branding";
 import { en } from "./en";
 import { is } from "./is";
 import type { Strings } from "./types";
@@ -21,7 +22,7 @@ export function isLocale(value: string): value is Locale {
 }
 
 export function getStrings(locale: Locale): Strings {
-  return LOCALE_DEFINITIONS[locale].strings;
+  return applyPlatformBranding(LOCALE_DEFINITIONS[locale].strings);
 }
 
 export function localeTag(locale: Locale): string {

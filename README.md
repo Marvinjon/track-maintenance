@@ -106,6 +106,8 @@ set -a && source .env.branding && set +a && npm run build
 | Variable | Purpose |
 |----------|---------|
 | `VITE_APP_TITLE` | App name (shown when no logo is set) |
+| `VITE_LOGIN_SUBTITLE` | Login screen subtitle |
+| `VITE_PLATFORM_NAME` | GPS platform name in UI copy (defaults to `Traccar` when unset) |
 | `VITE_LOGO_URL` | Logo path under `public/` (e.g. `/branding/logo.svg`) |
 | `VITE_LOGO_ALT` | Logo alt text |
 | `VITE_FAVICON_URL` | Favicon path (default `/favicon.svg`) |
