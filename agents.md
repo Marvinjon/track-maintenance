@@ -172,13 +172,19 @@ Loads `.env` from the **repo root** (works whether you start uvicorn from `backe
 
 ## Local development
 
-Prerequisites: real MySQL (`track_maintenance` schema migrated) and a running Traccar instance. Pytest mocks both; the live dev server does not.
+Prerequisites: Traccar running (or SSH-forwarded). MySQL for local dev starts via `./scripts/dev-db.sh` (Docker on port 3307). Pytest mocks both and uses in-memory SQLite.
+
+```bash
+cp .env.dev.example .env   # first time
+./scripts/dev.sh           # MySQL + migrations + backend + frontend
+```
+
+Or manually after `./scripts/dev-db.sh migrate`:
 
 ```bash
 # Backend
 cd backend
 python3 -m venv .venv && .venv/bin/pip install -e ".[dev]"
-.venv/bin/alembic upgrade head
 .venv/bin/python -m pytest
 .venv/bin/uvicorn app.main:app --reload
 
@@ -190,7 +196,7 @@ npm run dev   # http://localhost:5173, proxies /api to :8000
 
 Add `http://localhost:5173` to `CORS_ORIGINS` in `.env` if calling the API without the Vite proxy.
 
-Remote host: SSH-forward MySQL (3306) and Traccar (8082) before starting the backend.
+Remote host: SSH-forward Traccar (8082) before starting the backend if not local.
 
 ## Testing
 

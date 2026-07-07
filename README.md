@@ -141,23 +141,55 @@ Full list: [.env.example](.env.example).
 
 ## Development
 
-Local dev requires real MySQL and Traccar. Tests mock both.
+Local dev needs **Traccar** for login and device data. **MySQL starts automatically** via Docker — you do not need a local MySQL install for development.
+
+### Quick start (recommended)
 
 ```bash
-# Backend
-cd backend
-python3 -m venv .venv && .venv/bin/pip install -e ".[dev]"
-.venv/bin/alembic upgrade head
-.venv/bin/python -m pytest
-.venv/bin/uvicorn app.main:app --reload
-
-# Frontend (proxies /api to :8000)
-cd frontend
-npm install
-npm run dev
+cp .env.dev.example .env   # first time only
+./scripts/dev.sh           # starts MySQL, runs migrations, backend + frontend
 ```
 
-Open `http://localhost:5173`. API docs at `http://127.0.0.1:8000/docs` (non-production).
+Open `http://localhost:5173`. API docs at `http://127.0.0.1:8000/docs`.
+
+### Database only
+
+If you prefer separate terminals:
+
+```bash
+./scripts/dev-db.sh migrate   # start MySQL on :3307 and apply migrations
+
+# Terminal 1 — backend
+cd backend
+python3 -m venv .venv && .venv/bin/pip install -e ".[dev]"
+.venv/bin/uvicorn app.main:app --reload
+
+# Terminal 2 — frontend
+cd frontend && npm install && npm run dev
+```
+
+MySQL runs in Docker on **`127.0.0.1:3307`** (port 3307 avoids clashing with native MySQL or SSH forwards on 3306). Data persists in a Docker volume between restarts.
+
+```bash
+./scripts/dev-db.sh down      # stop MySQL
+./scripts/dev-db.sh status    # container status
+```
+
+### Tests
+
+Pytest mocks Traccar and uses in-memory SQLite — no Docker required:
+
+```bash
+cd backend && .venv/bin/python -m pytest
+```
+
+### Traccar for local dev
+
+Auth and device visibility call a real Traccar instance at `TRACCAR_URL`. If Traccar runs on a remote host, forward it first:
+
+```bash
+ssh -N -L 8082:127.0.0.1:8082 user@your-server
+```
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for PR guidelines.
 
@@ -177,7 +209,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for PR guidelines.
 |---------|--------------|
 | `502` on `/auth/me` | Traccar down or wrong `TRACCAR_URL` |
 | `401` after login | Cookie `secure` flag vs HTTP dev; check `SESSION_COOKIE_SECURE` |
-| DB errors | Wrong `DATABASE_URL` or migrations not applied |
+| DB errors | Wrong `DATABASE_URL` or migrations not applied — run `./scripts/dev-db.sh migrate` |
 | CORS in dev | Add `http://localhost:5173` to `CORS_ORIGINS`, or use Vite proxy |
 
 ## Project status

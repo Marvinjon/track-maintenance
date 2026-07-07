@@ -4,20 +4,32 @@ Thank you for your interest in contributing. This project is a companion service
 
 ## Development setup
 
-1. Copy `.env.example` to `.env` and configure MySQL + Traccar URLs.
-2. Backend:
+1. Copy dev environment file (uses Docker MySQL on port 3307):
    ```bash
-   cd backend
-   python3 -m venv .venv && .venv/bin/pip install -e ".[dev]"
-   .venv/bin/alembic upgrade head
-   .venv/bin/uvicorn app.main:app --reload
+   cp .env.dev.example .env
    ```
-3. Frontend:
+2. Start everything:
    ```bash
-   cd frontend
-   npm install
-   npm run dev
+   ./scripts/dev.sh
    ```
+   Or start MySQL + migrations only: `./scripts/dev-db.sh migrate`
+3. Traccar must be reachable at `TRACCAR_URL` for login (SSH-forward port 8082 if remote).
+
+Backend-only after DB is up:
+
+```bash
+cd backend
+python3 -m venv .venv && .venv/bin/pip install -e ".[dev]"
+.venv/bin/uvicorn app.main:app --reload
+```
+
+Frontend (separate terminal if not using `./scripts/dev.sh`):
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
 
 ## Tests
 

@@ -1,0 +1,27 @@
+# Local development only — starts MySQL for the backend.
+# Production deployments use native MySQL on the host (see docker-compose.yml).
+name: track-maintenance-dev
+
+services:
+  mysql:
+    image: mysql:8.4
+    ports:
+      # 3307 avoids clashing with a native MySQL or SSH-forwarded :3306.
+      - "127.0.0.1:3307:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: dev-root
+      MYSQL_DATABASE: track_maintenance
+      MYSQL_USER: maint_user
+      MYSQL_PASSWORD: dev-password
+    volumes:
+      - track_maintenance_mysql_data:/var/lib/mysql
+      - ./deploy/mysql-dev-init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-u", "root", "-pdev-root"]
+      interval: 3s
+      timeout: 5s
+      retries: 15
+      start_period: 10s
+
+volumes:
+  track_maintenance_mysql_data:
