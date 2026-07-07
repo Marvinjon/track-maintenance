@@ -28,6 +28,7 @@ import { costReportSummarySheet } from "../export/datasets";
 import { downloadTableExport } from "../export/tableExport";
 import { formatCost } from "../format";
 import { useSettingsStyles } from "../styles/useSettingsStyles";
+import { useCurrency } from "../hooks/useCurrency";
 import { useLocale, useStrings } from "../hooks/useLocale";
 
 function monthLabel(year: number, month: number): string {
@@ -50,6 +51,7 @@ function defaultToDate(): string {
 
 export default function ReportsPage() {
   const strings = useStrings();
+  const { currency: preferredCurrency } = useCurrency();
   const { locale } = useLocale();
   const { classes } = useSettingsStyles();
   const [fromDate, setFromDate] = useState(defaultFromDate);
@@ -89,7 +91,7 @@ export default function ReportsPage() {
   };
 
   const summary = data?.summaries[0];
-  const currency = summary?.currency ?? "ISK";
+  const currency = summary?.currency ?? preferredCurrency;
 
   return (
     <>

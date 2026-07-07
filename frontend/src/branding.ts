@@ -1,10 +1,13 @@
 /** Build-time branding overrides (see frontend/.env.branding.example). */
 export const DEFAULT_PLATFORM_NAME = "Traccar";
 
+export const FALLBACK_DEFAULT_CURRENCY = "USD";
+
 export const branding = {
   appTitle: import.meta.env.VITE_APP_TITLE?.trim() || "",
   loginSubtitle: import.meta.env.VITE_LOGIN_SUBTITLE?.trim() || "",
   platformName: import.meta.env.VITE_PLATFORM_NAME?.trim() || "",
+  defaultCurrency: import.meta.env.VITE_DEFAULT_CURRENCY?.trim() || "",
   logoUrl: import.meta.env.VITE_LOGO_URL?.trim() || "",
   logoAlt: import.meta.env.VITE_LOGO_ALT?.trim() || "Logo",
   faviconUrl: import.meta.env.VITE_FAVICON_URL?.trim() || "/favicon.svg",
@@ -21,6 +24,17 @@ export function resolveLoginSubtitle(fallback: string): string {
 
 export function resolvePlatformName(fallback = DEFAULT_PLATFORM_NAME): string {
   return branding.platformName || fallback;
+}
+
+export function normalizeCurrencyCode(value: string): string {
+  return value.trim().toUpperCase().slice(0, 3);
+}
+
+export function resolveDefaultCurrency(fallback = FALLBACK_DEFAULT_CURRENCY): string {
+  const configured = branding.defaultCurrency;
+  if (!configured) return fallback;
+  const code = normalizeCurrencyCode(configured);
+  return code.length === 3 ? code : fallback;
 }
 
 function brandPlatformText(text: string, platformName: string): string {

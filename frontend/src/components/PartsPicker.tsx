@@ -13,6 +13,7 @@ import {
 } from "@mui/material";
 import type { Part } from "../api/types";
 import { formatCost } from "../format";
+import { DEFAULT_CURRENCY } from "../hooks/useCurrency";
 import { useStrings } from "../hooks/useLocale";
 
 export interface PartRow {
@@ -29,7 +30,13 @@ interface Props {
   currency?: string;
 }
 
-export function PartsPicker({ rows, setRows, parts, stockBonus = {}, currency = "ISK" }: Props) {
+export function PartsPicker({
+  rows,
+  setRows,
+  parts,
+  stockBonus = {},
+  currency = DEFAULT_CURRENCY,
+}: Props) {
   const strings = useStrings();
   const byId = new Map(parts.map((p) => [String(p.id), p]));
 

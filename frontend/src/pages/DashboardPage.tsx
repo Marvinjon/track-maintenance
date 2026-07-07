@@ -16,6 +16,7 @@ import { NewServiceModal } from "../components/NewServiceModal";
 import { RecordDrawer } from "../components/RecordDrawer";
 import { formatCost } from "../format";
 import type { Strings } from "../i18n";
+import { useCurrency } from "../hooks/useCurrency";
 import { useStrings } from "../hooks/useLocale";
 
 function vehicleDisplay(strings: Strings, record: DashboardRecord): string {
@@ -68,6 +69,7 @@ function StatCard({
 
 export default function DashboardPage() {
   const strings = useStrings();
+  const { currency: preferredCurrency } = useCurrency();
   const [logServiceOpen, setLogServiceOpen] = useState(false);
   const [selectedRecord, setSelectedRecord] = useState<DashboardRecord | null>(null);
   const { data, isLoading, isError } = useQuery({
@@ -78,7 +80,7 @@ export default function DashboardPage() {
   if (isLoading) return <Typography>{strings.common.loading}</Typography>;
   if (isError || !data) return <Alert severity="error">{strings.common.error}</Alert>;
 
-  const currency = data.currency ?? "ISK";
+  const currency = data.currency ?? preferredCurrency;
   const spendSubtitle = strings.dashboard.vsLastMonth(
     formatCost(String(data.spend_last_month), currency),
   );

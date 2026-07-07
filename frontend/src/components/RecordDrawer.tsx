@@ -226,7 +226,7 @@ export function RecordDrawer({ recordId, vehicleLabel, onClose }: Props) {
               fullWidth
               size="small"
               inputProps={{ min: 0 }}
-              InputProps={{ endAdornment: ` ${strings.logService.currency}` }}
+              InputProps={{ endAdornment: ` ${record.currency}` }}
             />
             <TextField
               label={strings.records.performedBy}

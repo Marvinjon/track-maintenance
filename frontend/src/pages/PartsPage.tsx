@@ -25,11 +25,13 @@ import {
   PARTS_IMPORT_EXAMPLE,
   PARTS_IMPORT_HEADERS,
 } from "../export/importTemplates";
+import { useCurrency } from "../hooks/useCurrency";
 import { useSettingsStyles } from "../styles/useSettingsStyles";
 import { useStrings } from "../hooks/useLocale";
 
 function NewPartDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const strings = useStrings();
+  const { currency } = useCurrency();
   const queryClient = useQueryClient();
   const { classes } = useSettingsStyles();
   const [name, setName] = useState("");
@@ -103,7 +105,7 @@ function NewPartDialog({ open, onClose }: { open: boolean; onClose: () => void }
             fullWidth
             size="small"
             InputProps={{
-              endAdornment: ` ${strings.logService.currency}`,
+              endAdornment: ` ${currency}`,
             }}
           />
         </Stack>

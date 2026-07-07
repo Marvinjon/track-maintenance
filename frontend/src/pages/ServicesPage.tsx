@@ -26,6 +26,7 @@ import {
 import { formatCost, formatKm } from "../format";
 import { useSettingsStyles } from "../styles/useSettingsStyles";
 import type { Strings } from "../i18n";
+import { useCurrency } from "../hooks/useCurrency";
 import { useStrings } from "../hooks/useLocale";
 
 function vehicleDisplay(strings: Strings, record: MaintenanceRecordWithVehicle): string {
@@ -38,6 +39,7 @@ function vehicleDisplay(strings: Strings, record: MaintenanceRecordWithVehicle):
 
 export default function ServicesPage() {
   const strings = useStrings();
+  const { currency: preferredCurrency } = useCurrency();
   const { classes } = useSettingsStyles();
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedRecord, setSelectedRecord] = useState<MaintenanceRecordWithVehicle | null>(
@@ -57,7 +59,7 @@ export default function ServicesPage() {
     if (record.cost === null) return sum;
     return sum + Number(record.cost);
   }, 0);
-  const currency = data.items[0]?.currency ?? "ISK";
+  const currency = data.items[0]?.currency ?? preferredCurrency;
 
   return (
     <>

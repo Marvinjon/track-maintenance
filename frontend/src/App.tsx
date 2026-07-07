@@ -4,6 +4,7 @@ import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { ApiError, api, fetchSession } from "./api/client";
 import PageLayout from "./components/PageLayout";
 import { useAppMenu } from "./components/useAppMenu";
+import { CurrencyProvider } from "./hooks/useCurrency";
 import { useStrings } from "./hooks/useLocale";
 import DashboardPage from "./pages/DashboardPage";
 import LowStockPage from "./pages/LowStockPage";
@@ -168,9 +169,11 @@ function AuthenticatedApp() {
   }
 
   return (
-    <BrowserRouter>
-      <ShellRoutes onLogout={() => void handleLogout()} />
-    </BrowserRouter>
+    <CurrencyProvider userId={session.data.id}>
+      <BrowserRouter>
+        <ShellRoutes onLogout={() => void handleLogout()} />
+      </BrowserRouter>
+    </CurrencyProvider>
   );
 }
 

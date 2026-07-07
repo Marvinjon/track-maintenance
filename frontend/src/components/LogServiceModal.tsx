@@ -18,6 +18,7 @@ import { api } from "../api/client";
 import { PartsPicker, validPartRows, type PartRow } from "./PartsPicker";
 import { todayIso } from "../format";
 import { useSettingsStyles } from "../styles/useSettingsStyles";
+import { useCurrency } from "../hooks/useCurrency";
 import { useStrings } from "../hooks/useLocale";
 
 interface LogServiceVehicle {
@@ -33,6 +34,7 @@ interface Props {
 
 export function LogServiceModal({ vehicle, open, onClose }: Props) {
   const strings = useStrings();
+  const { currency } = useCurrency();
   const queryClient = useQueryClient();
   const { classes } = useSettingsStyles();
   const { data: serviceTypes } = useQuery({
@@ -114,6 +116,7 @@ export function LogServiceModal({ vehicle, open, onClose }: Props) {
         performed_at: performedAt,
         odometer_km: odometerKm === "" ? undefined : odometerKm,
         cost: cost === "" ? undefined : cost,
+        currency,
         performed_by: performedBy || undefined,
         notes: notes || undefined,
         parts: validParts.map((row) => ({
@@ -204,7 +207,7 @@ export function LogServiceModal({ vehicle, open, onClose }: Props) {
             fullWidth
             size="small"
             inputProps={{ min: 0 }}
-            InputProps={{ endAdornment: ` ${strings.logService.currency}` }}
+            InputProps={{ endAdornment: ` ${currency}` }}
           />
           <TextField
             label={strings.records.performedBy}
@@ -226,16 +229,16 @@ export function LogServiceModal({ vehicle, open, onClose }: Props) {
             rows={partRows}
             setRows={setPartRows}
             parts={parts ?? []}
-            currency={strings.logService.currency}
+            currency={currency}
           />
           {estimatedPartsCost > 0 && (
             <Typography variant="body2" color="text.secondary">
               {strings.logService.estimatedPartsCost}:{" "}
-              {estimatedPartsCost.toLocaleString("en-GB")} {strings.logService.currency}
+              {estimatedPartsCost.toLocaleString("en-GB")} {currency}
               {laborCost > 0 &&
                 ` · ${strings.logService.totalWithParts(
-                  `${estimatedPartsCost.toLocaleString("en-GB")} ${strings.logService.currency}`,
-                  `${laborCost.toLocaleString("en-GB")} ${strings.logService.currency}`,
+                  `${estimatedPartsCost.toLocaleString("en-GB")} ${currency}`,
+                  `${laborCost.toLocaleString("en-GB")} ${currency}`,
                 )}`}
             </Typography>
           )}

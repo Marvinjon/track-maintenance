@@ -10,6 +10,7 @@ import {
 import type { Part } from "../api/types";
 import { formatCost } from "../format";
 import { useSettingsStyles } from "../styles/useSettingsStyles";
+import { useCurrency } from "../hooks/useCurrency";
 import { useStrings } from "../hooks/useLocale";
 import { TablePanel } from "./TablePanel";
 
@@ -20,6 +21,7 @@ interface Props {
 
 export function PartsTable({ parts, onRowClick }: Props) {
   const strings = useStrings();
+  const { currency } = useCurrency();
   const { classes } = useSettingsStyles();
 
   return (
@@ -63,7 +65,7 @@ export function PartsTable({ parts, onRowClick }: Props) {
                 {Number(part.min_stock).toLocaleString("en-GB")} {part.unit}
               </TableCell>
               <TableCell className={classes.hideOnMobile}>
-                {formatCost(part.unit_cost, strings.logService.currency)}
+                {formatCost(part.unit_cost, currency)}
               </TableCell>
             </TableRow>
           ))}
