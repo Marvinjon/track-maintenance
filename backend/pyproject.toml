@@ -1,0 +1,35 @@
+[project]
+name = "track-maintenance-backend"
+version = "0.1.0"
+description = "Maintenance & parts inventory companion service for Traccar"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi==0.139.0",
+    "uvicorn[standard]==0.50.2",
+    "sqlalchemy==2.0.51",
+    "alembic==1.18.5",
+    "pydantic==2.13.4",
+    "pydantic-settings==2.14.2",
+    "httpx==0.28.1",
+    "pymysql==1.2.0",
+    "cryptography==49.0.0",
+    "apscheduler==3.11.3",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest==9.1.1",
+    "pytest-asyncio==1.4.0",
+    "respx==0.23.1",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"

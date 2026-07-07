@@ -1,0 +1,20 @@
+# Production compose file. Runs next to the NATIVE (non-Docker) Traccar and
+# MySQL on the same Ubuntu host — we never create containers for those.
+services:
+  backend:
+    image: track-maintenance-backend:latest
+    build: ./backend
+    # Host networking rationale:
+    #   The host's MySQL binds only to 127.0.0.1, so bridge networking would
+    #   require reconfiguring MySQL's bind-address and adding a
+    #   'maint_user'@'172.%' grant. network_mode: host avoids touching the
+    #   MySQL/Traccar config entirely: the container reaches native Traccar
+    #   (127.0.0.1:8082) and MySQL (127.0.0.1:3306) directly, and uvicorn on
+    #   127.0.0.1:8000 stays unreachable from outside — the host's Nginx
+    #   proxies to it. See README for the bridge-networking fallback.
+    network_mode: host
+    env_file: .env
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
