@@ -3,9 +3,12 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
 import { AppThemeProvider } from "./AppThemeProvider";
-import { branding } from "./branding";
+import { branding, resolveAppTitle } from "./branding";
 import { ConfirmProvider } from "./hooks/useConfirm";
 import { LocaleProvider } from "./hooks/useLocale";
+import { en } from "./i18n/en";
+
+document.title = resolveAppTitle(en.appTitle);
 
 const favicon = document.querySelector<HTMLLinkElement>("link[rel='icon']");
 if (favicon) {

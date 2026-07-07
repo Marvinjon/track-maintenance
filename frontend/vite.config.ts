@@ -31,8 +31,19 @@ function loadBrandingEnvFile() {
 
 loadBrandingEnvFile();
 
+function brandingHtmlPlugin() {
+  return {
+    name: "branding-html",
+    transformIndexHtml(html: string) {
+      const title = process.env.VITE_APP_TITLE?.trim();
+      if (!title) return html;
+      return html.replace(/<title>.*?<\/title>/, `<title>${title}</title>`);
+    },
+  };
+}
+
 export default defineConfig({
-  plugins: [react()],
+  plugins: [brandingHtmlPlugin(), react()],
   server: {
     // Dev only: forward API calls to a locally running backend.
     proxy: {
