@@ -3,8 +3,7 @@ import type { Strings } from "./types";
 export const is = {
   appTitle: "Track Maintenance",
   locale: {
-    icelandic: "Íslenska",
-    english: "Enska",
+    language: "Tungumál",
   },
   auth: {
     title: "Innskráning",

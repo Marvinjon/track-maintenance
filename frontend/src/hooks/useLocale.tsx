@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
-import { DEFAULT_LOCALE, getStrings, type Locale, type Strings } from "../i18n";
+import { DEFAULT_LOCALE, getStrings, isLocale, type Locale, type Strings } from "../i18n";
 
 const STORAGE_KEY = "track_maintenance_locale";
 
@@ -14,7 +14,7 @@ const LocaleContext = createContext<LocaleContextValue | null>(null);
 
 function getStoredLocale(): Locale {
   const stored = localStorage.getItem(STORAGE_KEY);
-  if (stored === "is" || stored === "en") {
+  if (stored && isLocale(stored)) {
     return stored;
   }
   return DEFAULT_LOCALE;

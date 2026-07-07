@@ -3,18 +3,21 @@ import {
   Box,
   Button,
   CircularProgress,
+  FormControl,
+  InputLabel,
+  MenuItem,
+  Select,
   Stack,
   TextField,
-  ToggleButton,
-  ToggleButtonGroup,
   Typography,
 } from "@mui/material";
 import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
 import { api } from "../api/client";
+import { resolveLoginSubtitle } from "../branding";
 import LoginLayout from "../components/LoginLayout";
-import type { Locale } from "../i18n";
 import { useLocale, useStrings } from "../hooks/useLocale";
+import { LOCALE_DEFINITIONS, LOCALES, type Locale } from "../i18n";
 
 type LoginPageProps = {
   onSuccess: () => void;
@@ -34,21 +37,24 @@ export default function LoginPage({ onSuccess }: LoginPageProps) {
   return (
     <LoginLayout>
       <Stack spacing={2}>
-        <ToggleButtonGroup
-          exclusive
-          size="small"
-          value={locale}
-          onChange={(_, value: Locale | null) => {
-            if (value) setLocale(value);
-          }}
-          sx={{ alignSelf: "flex-end" }}
-        >
-          <ToggleButton value="is">{strings.locale.icelandic}</ToggleButton>
-          <ToggleButton value="en">{strings.locale.english}</ToggleButton>
-        </ToggleButtonGroup>
+        <FormControl size="small" sx={{ alignSelf: "flex-end", minWidth: 140 }}>
+          <InputLabel id="login-locale-label">{strings.locale.language}</InputLabel>
+          <Select
+            labelId="login-locale-label"
+            label={strings.locale.language}
+            value={locale}
+            onChange={(event) => setLocale(event.target.value as Locale)}
+          >
+            {LOCALES.map((code) => (
+              <MenuItem key={code} value={code}>
+                {LOCALE_DEFINITIONS[code].label}
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
         <Typography variant="h5">{strings.auth.title}</Typography>
         <Typography variant="body2" color="text.secondary">
-          {strings.auth.subtitle}
+          {resolveLoginSubtitle(strings.auth.subtitle)}
         </Typography>
         {login.isError && (
           <Alert severity="error">

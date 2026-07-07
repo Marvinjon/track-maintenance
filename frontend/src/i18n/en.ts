@@ -1,8 +1,7 @@
 export const en = {
   appTitle: "Track Maintenance",
   locale: {
-    icelandic: "Íslenska",
-    english: "English",
+    language: "Language",
   },
   auth: {
     title: "Sign in",
