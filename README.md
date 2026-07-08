@@ -4,6 +4,8 @@ Open-source companion service for [Traccar](https://www.traccar.org/) GPS fleet 
 
 **License:** [Apache License 2.0](LICENSE) (same as Traccar).
 
+![Track Maintenance web app — Service types page](image-from-web-app.png)
+
 ## Features
 
 - Maintenance records with odometer tracking and parts usage
