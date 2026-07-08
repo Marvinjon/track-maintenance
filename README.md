@@ -92,6 +92,31 @@ Install the vhost from [deploy/nginx.conf.example](deploy/nginx.conf.example) an
 
 Both backend and frontend must be deployed on upgrades — rebuilding Docker does not update static files.
 
+## Upgrading an existing deployment
+
+From the repo root on the production host:
+
+1. **Pull** the new release (`git pull` or unpack the new tarball).
+2. **Review** `.env.example` for any new variables; update `.env` if needed (do not overwrite secrets).
+3. **Backend** — rebuild, migrate, restart:
+   ```bash
+   docker compose build
+   docker compose run --rm backend alembic upgrade head
+   docker compose up -d
+   ```
+   Migrations are **not** run on container start; `alembic upgrade head` is required after every release that adds schema changes.
+4. **Frontend** — rebuild and copy static files to the Nginx docroot:
+   ```bash
+   cd frontend
+   npm ci
+   npm run build
+   sudo cp -r dist/* /var/www/fleet/
+   ```
+   If you use white-label env vars, source `frontend/.env.branding` before `npm run build` (see [White-labeling](#white-labeling)).
+5. **Verify** — `curl -s http://127.0.0.1:8000/api/v1/health` should report database and Traccar OK; reload Nginx if you changed its config (`sudo nginx -t && sudo systemctl reload nginx`).
+
+Traccar itself does not need to be restarted for Track Maintenance upgrades.
+
 ## White-labeling
 
 Customize branding without forking by setting Vite env vars at build time:
