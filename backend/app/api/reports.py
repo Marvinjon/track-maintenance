@@ -29,6 +29,7 @@ from app.services.reports import (
     record_costs_query,
     spend_for_period,
 )
+from app.services.tenant_scope import catalog_visibility_filter
 from app.services.stock import current_stock_map
 from app.services.traccar import TraccarService, get_traccar
 
@@ -129,7 +130,12 @@ async def get_dashboard(
             elif status == ReminderStatus.due_soon:
                 due_soon = count
 
-    parts = db.execute(select(Part).where(Part.archived.is_(False))).scalars().all()
+    parts = db.execute(
+        select(Part).where(
+            Part.archived.is_(False),
+            catalog_visibility_filter(Part.traccar_tenant_user_id, ctx.tenant_user_id),
+        )
+    ).scalars().all()
     if parts:
         stocks = current_stock_map(db, [p.id for p in parts])
         low_stock_count = sum(

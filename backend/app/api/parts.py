@@ -18,6 +18,12 @@ from app.schemas.parts import (
 )
 from app.schemas.importing import ImportResult, ImportRowError, PartImportRequest
 from app.services.stock import add_movement, current_stock_map
+from app.services.tenant_scope import (
+    assert_catalog_visible,
+    catalog_visibility_filter,
+    create_tenant_id,
+    tenant_name_conflict_filter,
+)
 
 router = APIRouter(prefix="/parts", tags=["parts"])
 
@@ -29,10 +35,11 @@ def _to_out(part: Part, stock: Decimal) -> PartOut:
     )
 
 
-def _get_part(db: Session, part_id: int) -> Part:
+def _get_part(db: Session, part_id: int, ctx: CurrentUser) -> Part:
     part = db.get(Part, part_id)
     if part is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Part not found")
+    assert_catalog_visible(part, ctx.tenant_user_id, detail="Part not found")
     return part
 
 
@@ -42,7 +49,11 @@ async def list_parts(
     db: Annotated[Session, Depends(get_db)],
     include_archived: bool = False,
 ) -> list[PartOut]:
-    query = select(Part).order_by(Part.name)
+    query = (
+        select(Part)
+        .where(catalog_visibility_filter(Part.traccar_tenant_user_id, ctx.tenant_user_id))
+        .order_by(Part.name)
+    )
     if not include_archived:
         query = query.where(Part.archived.is_(False))
     parts = db.execute(query).scalars().all()
@@ -56,13 +67,19 @@ async def create_part(
     ctx: CurrentUser,
     db: Annotated[Session, Depends(get_db)],
 ) -> PartOut:
+    tenant_id = create_tenant_id(ctx)
     if body.sku is not None:
-        existing = db.execute(select(Part).where(Part.sku == body.sku)).scalar_one_or_none()
+        existing = db.execute(
+            select(Part).where(
+                Part.sku == body.sku,
+                tenant_name_conflict_filter(Part.traccar_tenant_user_id, tenant_id),
+            )
+        ).scalar_one_or_none()
         if existing is not None:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT, detail="SKU already exists"
             )
-    part = Part(**body.model_dump())
+    part = Part(**body.model_dump(), traccar_tenant_user_id=tenant_id)
     db.add(part)
     db.commit()
     db.refresh(part)
@@ -76,6 +93,7 @@ async def import_parts(
     db: Annotated[Session, Depends(get_db)],
 ) -> ImportResult:
     """Bulk import parts from parsed CSV rows."""
+    tenant_id = create_tenant_id(ctx)
     created = 0
     skipped = 0
     errors: list[ImportRowError] = []
@@ -88,7 +106,12 @@ async def import_parts(
 
         sku = row.sku.strip() or None
         if sku:
-            existing = db.execute(select(Part).where(Part.sku == sku)).scalar_one_or_none()
+            existing = db.execute(
+                select(Part).where(
+                    Part.sku == sku,
+                    tenant_name_conflict_filter(Part.traccar_tenant_user_id, tenant_id),
+                )
+            ).scalar_one_or_none()
             if existing is not None:
                 skipped += 1
                 continue
@@ -131,6 +154,7 @@ async def import_parts(
             unit=unit,
             min_stock=min_stock,
             unit_cost=unit_cost,
+            traccar_tenant_user_id=tenant_id,
         )
         db.add(part)
         db.flush()
@@ -162,7 +186,7 @@ async def update_part(
     ctx: CurrentUser,
     db: Annotated[Session, Depends(get_db)],
 ) -> PartOut:
-    part = _get_part(db, part_id)
+    part = _get_part(db, part_id, ctx)
     for field, value in body.model_dump(exclude_unset=True).items():
         setattr(part, field, value)
     db.commit()
@@ -178,7 +202,7 @@ async def archive_part(
     db: Annotated[Session, Depends(get_db)],
 ) -> None:
     """Soft archive — the ledger history is kept."""
-    part = _get_part(db, part_id)
+    part = _get_part(db, part_id, ctx)
     part.archived = True
     db.commit()
 
@@ -195,7 +219,7 @@ async def create_movement(
     db: Annotated[Session, Depends(get_db)],
 ) -> MovementOut:
     """Manual ledger entry (purchase / adjustment / return)."""
-    part = _get_part(db, part_id)
+    part = _get_part(db, part_id, ctx)
     if body.quantity == 0:
         raise HTTPException(status_code=422, detail="Quantity must not be zero")
     movement = add_movement(
@@ -220,7 +244,7 @@ async def list_movements(
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> MovementListResponse:
     """Ledger view, newest first."""
-    _get_part(db, part_id)
+    _get_part(db, part_id, ctx)
     total = db.execute(
         select(func.count())
         .select_from(StockMovement)

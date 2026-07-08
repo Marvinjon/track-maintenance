@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app.models import Vehicle
 from app.services.traccar import TraccarService, UserCredential, get_traccar
+from app.services.tenant_scope import resolve_tenant_user_id
 
 SESSION_CACHE_TTL_SECONDS = 60.0
 DEVICE_CACHE_TTL_SECONDS = 300.0
@@ -29,12 +30,14 @@ class TraccarUser:
     name: str
     email: str
     administrator: bool
+    user_limit: int
 
 
 @dataclass(frozen=True)
 class AuthContext:
     user: TraccarUser
     credential: UserCredential
+    tenant_user_id: int | None
 
 
 class TTLCache:
@@ -103,9 +106,9 @@ async def get_current_user(
         )
 
     cache_key = credential.cache_key()
-    cached_user = _session_cache.get(cache_key)
-    if cached_user is not None:
-        return AuthContext(user=cached_user, credential=credential)
+    cached = _session_cache.get(cache_key)
+    if cached is not None:
+        return cached
 
     session = await traccar.as_user(credential).get_session()
     if session is None:
@@ -119,9 +122,18 @@ async def get_current_user(
         name=session.get("name", ""),
         email=session.get("email", ""),
         administrator=bool(session.get("administrator", False)),
+        user_limit=int(session.get("userLimit", 0)),
     )
-    _session_cache.set(cache_key, user)
-    return AuthContext(user=user, credential=credential)
+    tenant_user_id = await resolve_tenant_user_id(
+        traccar,
+        credential,
+        user_id=user.id,
+        administrator=user.administrator,
+        user_limit=user.user_limit,
+    )
+    ctx = AuthContext(user=user, credential=credential, tenant_user_id=tenant_user_id)
+    _session_cache.set(cache_key, ctx)
+    return ctx
 
 
 CurrentUser = Annotated[AuthContext, Depends(get_current_user)]

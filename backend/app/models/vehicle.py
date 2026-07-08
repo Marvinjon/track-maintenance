@@ -25,3 +25,5 @@ class Vehicle(IdTimestampMixin, Base):
     archived: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default=false()
     )
+    # Manager tenant for catalog rows created via this vehicle (maintenance sync).
+    traccar_tenant_user_id: Mapped[int | None] = mapped_column(BigInteger, index=True)

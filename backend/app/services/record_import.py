@@ -12,7 +12,7 @@ from app.models import MaintenanceRecord, ServiceType, Vehicle
 from app.schemas.importing import ImportResult, ImportRowError, RecordImportRow
 from app.services.odometer_sync import apply_logged_odometer
 from app.services.reminders import reset_reminders_after_service
-from app.services.traccar import TraccarService
+from app.services.tenant_scope import list_visible_service_types
 
 
 def _norm(value: str) -> str:
@@ -108,6 +108,7 @@ async def import_records(
     *,
     rows: list[RecordImportRow],
     user_id: int,
+    tenant_user_id: int | None,
     traccar: TraccarService,
     credential: str,
 ) -> ImportResult:
@@ -135,7 +136,7 @@ async def import_records(
                 vehicles_by_device[_norm_key(device_name)] = vehicle
 
     service_types_by_name: dict[str, ServiceType] = {}
-    for service_type in db.execute(select(ServiceType)).scalars():
+    for service_type in list_visible_service_types(db, tenant_user_id):
         service_types_by_name[_norm_key(service_type.name)] = service_type
 
     created = 0

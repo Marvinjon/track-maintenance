@@ -8,7 +8,7 @@ everything).
 
 from decimal import Decimal
 
-from fastapi import HTTPException
+from fastapi import HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -59,11 +59,23 @@ def add_movement(
     return movement
 
 
-def _require_active_part(db: Session, part_id: int) -> Part:
+from app.services.tenant_scope import get_part as get_visible_part
+
+
+def _require_active_part(
+    db: Session, part_id: int, tenant_user_id: int | None
+) -> Part:
     part = db.get(Part, part_id)
     if part is None:
         raise HTTPException(status_code=422, detail=f"Unknown part id {part_id}")
-    return part
+    try:
+        return get_visible_part(db, part_id, tenant_user_id)
+    except HTTPException as exc:
+        if exc.status_code == status.HTTP_404_NOT_FOUND:
+            raise HTTPException(
+                status_code=422, detail=f"Unknown part id {part_id}"
+            ) from exc
+        raise
 
 
 def apply_record_parts(
@@ -71,11 +83,12 @@ def apply_record_parts(
     record: MaintenanceRecord,
     parts: list[tuple[int, Decimal]],
     user_id: int,
+    tenant_user_id: int | None,
 ) -> None:
     """Attach parts to a maintenance record: one record_parts row and the
     matching negative used_in_service movement per part, same transaction."""
     for part_id, quantity in parts:
-        part = _require_active_part(db, part_id)
+        part = _require_active_part(db, part_id, tenant_user_id)
         db.add(
             RecordPart(
                 maintenance_record_id=record.id,

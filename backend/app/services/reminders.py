@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from app.models import Reminder, ServiceType, Vehicle
 from app.services.odometer_sync import compute_reminder_status
+from app.services.tenant_scope import catalog_visibility_filter, vehicle_catalog_tenant
 from app.services.traccar import TraccarService, hours_to_ms, km_to_meters
 
 logger = logging.getLogger(__name__)
@@ -117,7 +118,12 @@ async def create_default_reminders(
     vehicle: Vehicle,
 ) -> list[Reminder]:
     """Create local-only reminders from service type default intervals."""
-    service_types = db.execute(select(ServiceType)).scalars().all()
+    tenant_id = vehicle_catalog_tenant(vehicle.traccar_tenant_user_id)
+    service_types = db.execute(
+        select(ServiceType).where(
+            catalog_visibility_filter(ServiceType.traccar_tenant_user_id, tenant_id)
+        )
+    ).scalars().all()
     created: list[Reminder] = []
     for st in service_types:
         if st.default_interval_km is None and st.default_interval_days is None:

@@ -29,15 +29,9 @@ from app.services.stock import (
     reverse_record_parts,
 )
 from app.services.traccar import TraccarService, get_traccar
+from app.services.tenant_scope import get_service_type
 
 router = APIRouter(tags=["records"])
-
-
-def _require_service_type(db: Session, service_type_id: int) -> ServiceType:
-    service_type = db.get(ServiceType, service_type_id)
-    if service_type is None:
-        raise HTTPException(status_code=422, detail="Unknown service type")
-    return service_type
 
 
 def parts_by_record(db: Session, record_ids: list[int]) -> dict[int, list[RecordPartOut]]:
@@ -197,7 +191,7 @@ async def create_record(
     plus the matching negative stock movements (single transaction — a failure
     anywhere rolls back everything). A reminder linked to the same service
     type is reset and its Traccar mirror updated."""
-    service_type = _require_service_type(db, body.service_type_id)
+    service_type = get_service_type(db, body.service_type_id, ctx.tenant_user_id)
 
     record = await create_record_with_side_effects(
         db,
@@ -214,7 +208,11 @@ async def create_record(
     )
 
     apply_record_parts(
-        db, record, [(p.part_id, p.quantity) for p in body.parts], ctx.user.id
+        db,
+        record,
+        [(p.part_id, p.quantity) for p in body.parts],
+        ctx.user.id,
+        ctx.tenant_user_id,
     )
 
     db.commit()
@@ -235,6 +233,7 @@ async def import_records_endpoint(
         db,
         rows=body.rows,
         user_id=ctx.user.id,
+        tenant_user_id=ctx.tenant_user_id,
         traccar=traccar,
         credential=ctx.credential,
     )
@@ -273,7 +272,7 @@ async def update_record(
     before = _snapshot(db, record)
 
     if "service_type_id" in updates:
-        _require_service_type(db, updates["service_type_id"])
+        get_service_type(db, updates["service_type_id"], ctx.tenant_user_id)
     for field, value in updates.items():
         setattr(record, field, value)
     if odometer_km is not None:
@@ -287,7 +286,11 @@ async def update_record(
         # Replace parts: reverse the old movements, apply the new set.
         reverse_record_parts(db, record, ctx.user.id)
         apply_record_parts(
-            db, record, [(p["part_id"], p["quantity"]) for p in new_parts], ctx.user.id
+            db,
+            record,
+            [(p["part_id"], p["quantity"]) for p in new_parts],
+            ctx.user.id,
+            ctx.tenant_user_id,
         )
 
     after = _snapshot(db, record)

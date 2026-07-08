@@ -21,6 +21,7 @@ from app.schemas.vehicles import (
     VehicleTransferResult,
     VehicleUpdate,
 )
+from app.services.tenant_scope import create_tenant_id
 from app.services.maintenance_sync import sync_vehicle_maintenances
 from app.services.odometer_sync import sync_vehicle
 from app.services.reminders import create_default_reminders
@@ -138,7 +139,10 @@ async def create_vehicle(
             detail="Vehicle already registered for this device",
         )
 
-    vehicle = Vehicle(**body.model_dump(exclude={"create_default_reminders"}))
+    vehicle = Vehicle(
+        **body.model_dump(exclude={"create_default_reminders"}),
+        traccar_tenant_user_id=create_tenant_id(ctx),
+    )
     db.add(vehicle)
     db.flush()
 
@@ -184,7 +188,10 @@ async def bulk_create_vehicles(
             skipped.append(device_id)
             continue
 
-        vehicle = Vehicle(traccar_device_id=device_id)
+        vehicle = Vehicle(
+            traccar_device_id=device_id,
+            traccar_tenant_user_id=create_tenant_id(ctx),
+        )
         db.add(vehicle)
         db.flush()
 
@@ -327,6 +334,7 @@ async def transfer_tracker(
         model=body.model,
         year=body.year,
         notes=body.notes,
+        traccar_tenant_user_id=vehicle.traccar_tenant_user_id or create_tenant_id(ctx),
     )
     db.add(new_vehicle)
     db.flush()

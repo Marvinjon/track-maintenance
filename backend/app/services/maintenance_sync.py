@@ -15,6 +15,7 @@ from app.models import Reminder, ServiceType, Vehicle
 from app.services.odometer_sync import compute_reminder_status
 from app.services.reminders import push_traccar_maintenance_start
 from app.services.traccar import TraccarService, meters_to_km, ms_to_hours
+from app.services.tenant_scope import vehicle_catalog_tenant
 from app.services.traccar_maintenance_types import (
     DISTANCE_MAINTENANCE_TYPES,
     HOURS_MAINTENANCE_TYPES,
@@ -49,12 +50,20 @@ def _reminder_snapshot(reminder: Reminder) -> tuple:
 
 
 def _find_or_create_service_type(
-    db: Session, name: str, *, interval_km: int | None, interval_hours: int | None
+    db: Session,
+    name: str,
+    *,
+    interval_km: int | None,
+    interval_hours: int | None,
+    tenant_user_id: int | None,
 ) -> ServiceType:
     normalized = name.strip()
-    existing = db.execute(
-        select(ServiceType).where(func.lower(ServiceType.name) == normalized.lower())
-    ).scalar_one_or_none()
+    filters = [func.lower(ServiceType.name) == normalized.lower()]
+    if tenant_user_id is None:
+        filters.append(ServiceType.traccar_tenant_user_id.is_(None))
+    else:
+        filters.append(ServiceType.traccar_tenant_user_id == tenant_user_id)
+    existing = db.execute(select(ServiceType).where(*filters)).scalar_one_or_none()
     if existing is not None:
         return existing
 
@@ -62,6 +71,7 @@ def _find_or_create_service_type(
         name=normalized,
         default_interval_km=interval_km,
         default_interval_days=None,
+        traccar_tenant_user_id=tenant_user_id,
     )
     db.add(service_type)
     db.flush()
@@ -161,7 +171,11 @@ async def sync_vehicle_maintenances(
             interval_hours = int(ms_to_hours(float(period)))
 
         service_type = _find_or_create_service_type(
-            db, name, interval_km=interval_km, interval_hours=interval_hours
+            db,
+            name,
+            interval_km=interval_km,
+            interval_hours=interval_hours,
+            tenant_user_id=vehicle_catalog_tenant(vehicle.traccar_tenant_user_id),
         )
 
         reminder = existing_by_traccar_id.get(traccar_id)

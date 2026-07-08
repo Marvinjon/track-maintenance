@@ -16,16 +16,10 @@ from app.schemas.reminders import (
 )
 from app.services.odometer_sync import compute_reminder_status
 from app.services.serialization import reminder_to_out
+from app.services.tenant_scope import get_service_type
 from app.services.traccar import TraccarService, get_traccar
 
 router = APIRouter(tags=["reminders"])
-
-
-def _require_service_type(db: Session, service_type_id: int) -> ServiceType:
-    service_type = db.get(ServiceType, service_type_id)
-    if service_type is None:
-        raise HTTPException(status_code=422, detail="Unknown service type")
-    return service_type
 
 
 def _to_out(reminder: Reminder, service_type: ServiceType) -> ReminderOut:
@@ -134,10 +128,11 @@ async def list_reminders(
 async def create_reminder(
     body: ReminderCreate,
     vehicle: AuthorizedVehicle,
+    ctx: CurrentUser,
     db: Annotated[Session, Depends(get_db)],
 ) -> ReminderOut:
     """Create a local-only reminder (not pushed to Traccar)."""
-    service_type = _require_service_type(db, body.service_type_id)
+    service_type = get_service_type(db, body.service_type_id, ctx.tenant_user_id)
 
     reminder = Reminder(vehicle_id=vehicle.id, **body.model_dump())
     reminder.status = compute_reminder_status(reminder, vehicle)

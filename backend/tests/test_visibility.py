@@ -48,15 +48,20 @@ def test_unregistered_devices_are_returned_as_stubs(client, db, traccar_mock):
     assert body[2]["device_name"] == "Truck"
 
 
-def _ctx(user: dict) -> AuthContext:
+def _ctx(user: dict, tenant_user_id: int | None = None) -> AuthContext:
+    uid = user["id"]
+    if tenant_user_id is None:
+        tenant_user_id = uid if not user.get("administrator") else None
     return AuthContext(
         user=TraccarUser(
-            id=user["id"],
+            id=uid,
             name=user["name"],
             email=user["email"],
             administrator=user["administrator"],
+            user_limit=int(user.get("userLimit", 0)),
         ),
-        credential=UserCredential(session_cookie=f"cookie-{user['id']}"),
+        credential=UserCredential(session_cookie=f"cookie-{uid}"),
+        tenant_user_id=tenant_user_id,
     )
 
 

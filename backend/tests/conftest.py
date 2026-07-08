@@ -79,11 +79,34 @@ def traccar_mock():
         mock.get(url__regex=rf"{TRACCAR}/api/maintenance.*").mock(
             return_value=Response(200, json=[])
         )
+        mock.get(f"{TRACCAR}/api/permissions").mock(return_value=Response(200, json=[]))
         yield mock
 
 
-USER_A = {"id": 1, "name": "User A", "email": "a@example.com", "administrator": False}
-USER_B = {"id": 2, "name": "User B", "email": "b@example.com", "administrator": False}
+USER_A = {"id": 1, "name": "User A", "email": "a@example.com", "administrator": False, "userLimit": 0}
+USER_B = {"id": 2, "name": "User B", "email": "b@example.com", "administrator": False, "userLimit": 0}
+USER_MANAGER = {"id": 10, "name": "Manager M", "email": "m@example.com", "administrator": False, "userLimit": 10}
+USER_A_MANAGED = {"id": 11, "name": "User A2", "email": "a2@example.com", "administrator": False, "userLimit": 0}
+USER_OTHER_MANAGER = {"id": 20, "name": "Manager N", "email": "n@example.com", "administrator": False, "userLimit": 10}
+USER_OTHER = {"id": 21, "name": "User C", "email": "c@example.com", "administrator": False, "userLimit": 0}
+
+
+def mock_managed_user(mock: respx.MockRouter, manager_id: int, user_id: int):
+    """Mock Traccar permission link: manager manages user."""
+
+    def permissions_responder(request):
+        params = request.url.params
+        if (
+            params.get("managedUserId") == str(user_id)
+            and params.get("userId") == "0"
+        ):
+            return Response(
+                200,
+                json=[{"userId": manager_id, "managedUserId": user_id}],
+            )
+        return Response(200, json=[])
+
+    return mock.get(f"{TRACCAR}/api/permissions").mock(side_effect=permissions_responder)
 
 
 def mock_session(mock: respx.MockRouter, user: dict | None, status: int = 200):

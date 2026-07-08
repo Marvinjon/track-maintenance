@@ -11,6 +11,7 @@ from app.db import get_db
 from app.models import Part
 from app.schemas.parts import PartOut
 from app.services.stock import current_stock_map
+from app.services.tenant_scope import catalog_visibility_filter
 
 router = APIRouter(prefix="/stock", tags=["stock"])
 
@@ -22,7 +23,14 @@ async def low_stock(
 ) -> list[PartOut]:
     """All non-archived parts whose current stock is below min_stock."""
     parts = (
-        db.execute(select(Part).where(Part.archived.is_(False)).order_by(Part.name))
+        db.execute(
+            select(Part)
+            .where(
+                Part.archived.is_(False),
+                catalog_visibility_filter(Part.traccar_tenant_user_id, ctx.tenant_user_id),
+            )
+            .order_by(Part.name)
+        )
         .scalars()
         .all()
     )

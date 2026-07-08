@@ -12,17 +12,26 @@ from app.schemas.records import FleetRecordListResponse, RecordWithVehicleOut
 from app.schemas.service_types import ServiceTypeCreate, ServiceTypeOut, ServiceTypeUpdate
 from app.schemas.importing import ImportResult, ImportRowError, ServiceTypeImportRequest
 from app.services.serialization import service_type_to_out
+from app.services.tenant_scope import (
+    assert_catalog_visible,
+    catalog_visibility_filter,
+    create_tenant_id,
+    tenant_name_conflict_filter,
+)
 from app.services.traccar import TraccarService, get_traccar
 
 router = APIRouter(prefix="/service-types", tags=["service-types"])
 
 
-def _get_service_type(db: Session, service_type_id: int) -> ServiceType:
+def _get_service_type(db: Session, service_type_id: int, ctx: CurrentUser) -> ServiceType:
     service_type = db.get(ServiceType, service_type_id)
     if service_type is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Service type not found"
         )
+    assert_catalog_visible(
+        service_type, ctx.tenant_user_id, detail="Service type not found"
+    )
     return service_type
 
 
@@ -31,10 +40,16 @@ async def list_service_types(
     ctx: CurrentUser,
     db: Annotated[Session, Depends(get_db)],
 ) -> list[ServiceTypeOut]:
-    return [
-        service_type_to_out(st)
-        for st in db.execute(select(ServiceType).order_by(ServiceType.name)).scalars()
-    ]
+    rows = db.execute(
+        select(ServiceType)
+        .where(
+            catalog_visibility_filter(
+                ServiceType.traccar_tenant_user_id, ctx.tenant_user_id
+            )
+        )
+        .order_by(ServiceType.name)
+    ).scalars()
+    return [service_type_to_out(st) for st in rows]
 
 
 @router.post("", response_model=ServiceTypeOut, status_code=status.HTTP_201_CREATED)
@@ -43,8 +58,13 @@ async def create_service_type(
     ctx: CurrentUser,
     db: Annotated[Session, Depends(get_db)],
 ) -> ServiceTypeOut:
+    tenant_id = create_tenant_id(ctx)
+    name = body.name.strip()
     existing = db.execute(
-        select(ServiceType).where(ServiceType.name == body.name.strip())
+        select(ServiceType).where(
+            ServiceType.name == name,
+            tenant_name_conflict_filter(ServiceType.traccar_tenant_user_id, tenant_id),
+        )
     ).scalar_one_or_none()
     if existing is not None:
         raise HTTPException(
@@ -52,8 +72,12 @@ async def create_service_type(
             detail="A service type with this name already exists",
         )
 
-    service_type = ServiceType(**body.model_dump())
-    service_type.name = body.name.strip()
+    service_type = ServiceType(
+        default_interval_km=body.default_interval_km,
+        default_interval_days=body.default_interval_days,
+        name=name,
+        traccar_tenant_user_id=tenant_id,
+    )
     db.add(service_type)
     db.commit()
     db.refresh(service_type)
@@ -67,6 +91,7 @@ async def import_service_types(
     db: Annotated[Session, Depends(get_db)],
 ) -> ImportResult:
     """Bulk import service types from parsed CSV rows."""
+    tenant_id = create_tenant_id(ctx)
     created = 0
     skipped = 0
     errors: list[ImportRowError] = []
@@ -78,7 +103,10 @@ async def import_service_types(
             continue
 
         existing = db.execute(
-            select(ServiceType).where(ServiceType.name == name)
+            select(ServiceType).where(
+                ServiceType.name == name,
+                tenant_name_conflict_filter(ServiceType.traccar_tenant_user_id, tenant_id),
+            )
         ).scalar_one_or_none()
         if existing is not None:
             skipped += 1
@@ -112,6 +140,7 @@ async def import_service_types(
             name=name,
             default_interval_km=interval_km,
             default_interval_days=interval_days,
+            traccar_tenant_user_id=tenant_id,
         )
         db.add(service_type)
         created += 1
@@ -131,7 +160,8 @@ async def update_service_type(
     ctx: CurrentUser,
     db: Annotated[Session, Depends(get_db)],
 ) -> ServiceTypeOut:
-    service_type = _get_service_type(db, service_type_id)
+    service_type = _get_service_type(db, service_type_id, ctx)
+    tenant_id = create_tenant_id(ctx)
     updates = body.model_dump(exclude_unset=True)
     if "name" in updates and updates["name"] is not None:
         updates["name"] = updates["name"].strip()
@@ -139,6 +169,7 @@ async def update_service_type(
             select(ServiceType).where(
                 ServiceType.name == updates["name"],
                 ServiceType.id != service_type_id,
+                tenant_name_conflict_filter(ServiceType.traccar_tenant_user_id, tenant_id),
             )
         ).scalar_one_or_none()
         if existing is not None:
@@ -163,7 +194,7 @@ async def list_records_for_service_type(
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> FleetRecordListResponse:
     """Maintenance history for a service type across visible vehicles."""
-    _get_service_type(db, service_type_id)
+    _get_service_type(db, service_type_id, ctx)
 
     devices = await traccar.as_user(ctx.credential).list_devices()
     device_ids = [d["id"] for d in devices]
