@@ -13,6 +13,7 @@ from app.schemas.importing import ImportResult, ImportRowError, RecordImportRow
 from app.services.odometer_sync import apply_logged_odometer
 from app.services.reminders import reset_reminders_after_service
 from app.services.tenant_scope import list_visible_service_types
+from app.services.traccar import TraccarService
 
 
 def _norm(value: str) -> str:
