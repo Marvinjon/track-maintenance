@@ -13,7 +13,7 @@ Open-source companion service for [Traccar](https://www.traccar.org/) GPS fleet 
 - Service reminders synced with Traccar maintenance entities
 - Fleet-wide views, CSV export, cost reports, and dashboard
 - Multi-tenant auth via Traccar credentials (session cookie or API token)
-- **Live demo** — static playground on GitHub Pages (no backend required)
+- **Live demo** — [try it online](https://marvinjon.github.io/track-maintenance/) (built from the [`demo`](../../tree/demo) branch; auto-synced on every `main` push)
 - **White-label ready** — custom app title, logo, favicon, and primary color at build time
 
 ## Stack
@@ -37,7 +37,7 @@ A fully interactive demo runs on GitHub Pages with seeded fleet data. No Traccar
 
 **URL:** [marvinjon.github.io/track-maintenance](https://marvinjon.github.io/track-maintenance/) (after you enable GitHub Pages; see below)
 
-Changes persist in the browser session until you refresh or click **Reset demo**. Every push to the **`demo` branch** rebuilds and redeploys automatically via [.github/workflows/demo.yml](.github/workflows/demo.yml).
+Changes persist in the browser session until you refresh or click **Reset demo**. Every push to **`main`** automatically merges into `demo` and redeploys via [.github/workflows/sync-demo.yml](../blob/main/.github/workflows/sync-demo.yml) and [.github/workflows/demo.yml](.github/workflows/demo.yml).
 
 The mock API and demo UI live only on the `demo` branch — `main` stays production-only.
 
@@ -45,21 +45,20 @@ The mock API and demo UI live only on the `demo` branch — `main` stays product
 
 1. Repo **Settings → Pages**
 2. **Build and deployment → Source:** GitHub Actions
-3. Push to the `demo` branch (or run the **Deploy demo** workflow manually)
+3. Ensure the `demo` branch exists on GitHub (push it once if needed)
 
-If you fork the repo under a different name, update `VITE_BASE_PATH` in `.github/workflows/demo.yml` on the `demo` branch to `/<your-repo-name>/`.
+If you fork the repo under a different name, update `VITE_BASE_PATH` in `.github/workflows/demo.yml` to `/<your-repo-name>/`.
 
-### Keep demo in sync with main
+### If automatic sync fails
 
-When `main` gets new features, merge them into `demo`:
+Pushes to `main` merge into `demo` automatically. If both branches changed the same file (e.g. `frontend/src/api/client.ts`), the sync workflow fails and you need to resolve manually:
 
 ```bash
 git checkout demo
 git merge main
+# fix conflicts — keep demo hooks in client.ts, App.tsx, etc.
 git push
 ```
-
-Resolve any conflicts by keeping demo-specific files (`frontend/src/demo/`, demo hooks in `client.ts`, etc.).
 
 ### Run the demo locally
 

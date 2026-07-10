@@ -1,0 +1,90 @@
+name: Sync demo branch
+
+# After every push to main, merge main into demo and push demo.
+# That push triggers the "Deploy demo" workflow on the demo branch.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-demo
+  cancel-in-progress: false
+
+jobs:
+  merge:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Merge main into demo and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          if ! git ls-remote --exit-code --heads origin demo >/dev/null 2>&1; then
+            echo "Remote demo branch does not exist yet — skipping sync."
+            echo "Push the demo branch once manually, then future main pushes will sync automatically."
+            exit 0
+          fi
+
+          git fetch origin demo
+          git checkout demo
+          git merge origin/main -m "Merge main into demo [automated]" || true
+
+          if git diff --name-only --diff-filter=U | grep -q .; then
+            echo "Merge conflicts detected — applying demo-branch resolution rules"
+
+            # Demo-only paths always keep the demo branch version.
+            demo_keep_ours=(
+              README.md
+              .github/workflows/demo.yml
+              frontend/package.json
+              frontend/vite.config.ts
+              frontend/src/vite-env.d.ts
+              frontend/src/api/auth.ts
+              frontend/src/api/errors.ts
+              frontend/src/api/client.ts
+              frontend/src/App.tsx
+              frontend/src/components/AppMenu.tsx
+              frontend/src/components/ReportsExportButton.tsx
+              frontend/src/i18n/en.ts
+              frontend/src/i18n/is.ts
+            )
+
+            for path in "${demo_keep_ours[@]}"; do
+              if git diff --name-only --diff-filter=U | grep -qx "$path"; then
+                git checkout --ours "$path"
+                git add "$path"
+              fi
+            done
+
+            if git diff --name-only --diff-filter=U | grep -q '^frontend/src/demo/'; then
+              git checkout --ours frontend/src/demo
+              git add frontend/src/demo
+            fi
+
+            # Everything else: take main's version.
+            while IFS= read -r file; do
+              [ -n "$file" ] || continue
+              git checkout --theirs "$file"
+              git add "$file"
+            done < <(git diff --name-only --diff-filter=U)
+
+            if git diff --name-only --diff-filter=U | grep -q .; then
+              echo "Unresolved merge conflicts:"
+              git diff --name-only --diff-filter=U
+              exit 1
+            fi
+
+            git commit -m "Merge main into demo [automated]"
+          fi
+
+          git push origin demo
