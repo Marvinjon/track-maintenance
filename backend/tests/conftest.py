@@ -5,7 +5,6 @@ os.environ["APP_ENV"] = "development"
 os.environ["DATABASE_URL"] = "sqlite://"
 os.environ["TRACCAR_URL"] = "http://traccar.test"
 os.environ["TRACCAR_PUBLIC_URL"] = ""
-os.environ["TRACCAR_ADMIN_TOKEN"] = "admin-test-token"
 os.environ["WEBHOOK_SECRET"] = "webhook-test-secret"
 
 import pytest
@@ -166,71 +165,7 @@ def position(device_id: int, **attributes) -> dict:
 
 
 def mock_accumulators_update(mock: respx.MockRouter):
-    """Mock PUT /api/devices/{id}/accumulators (admin token)."""
+    """Mock PUT /api/devices/{id}/accumulators."""
     return mock.put(url__regex=rf"{TRACCAR}/api/devices/\d+/accumulators").mock(
         return_value=Response(204)
     )
-
-
-def mock_traccar_notification_recipients(
-    mock: respx.MockRouter,
-    *,
-    device_id: int,
-    users: list[dict],
-    device_user_ids: list[int] | None = None,
-    maintenance_notifications: list[dict] | None = None,
-    notification_user_ids: dict[int, list[int]] | None = None,
-) -> None:
-    """Wire admin Traccar API mocks for maintenance email recipient lookup."""
-
-    def users_responder(request):
-        if request.url.params.get("all") == "true":
-            return Response(200, json=users)
-        return Response(200, json=users)
-
-    def notifications_responder(request):
-        if request.url.params.get("all") == "true":
-            return Response(200, json=maintenance_notifications or [])
-        return Response(200, json=maintenance_notifications or [])
-
-    def permissions_responder(request):
-        params = request.url.params
-        linked_device_id = params.get("deviceId")
-        notification_id = params.get("notificationId")
-        user_id = params.get("userId")
-
-        if linked_device_id == str(device_id) and notification_id == "0":
-            if maintenance_notifications:
-                return Response(
-                    200,
-                    json=[
-                        {"deviceId": device_id, "notificationId": item["id"]}
-                        for item in maintenance_notifications
-                    ],
-                )
-            return Response(200, json=[])
-
-        if user_id == "0" and notification_id not in (None, "0"):
-            linked_users = (notification_user_ids or {}).get(int(notification_id), [])
-            return Response(
-                200,
-                json=[
-                    {"userId": uid, "notificationId": int(notification_id)}
-                    for uid in linked_users
-                ],
-            )
-
-        if linked_device_id == str(device_id) and user_id == "0":
-            linked_users = device_user_ids if device_user_ids is not None else [
-                user["id"] for user in users
-            ]
-            return Response(
-                200,
-                json=[{"userId": uid, "deviceId": device_id} for uid in linked_users],
-            )
-
-        return Response(200, json=[])
-
-    mock.get(f"{TRACCAR}/api/users").mock(side_effect=users_responder)
-    mock.get(f"{TRACCAR}/api/notifications").mock(side_effect=notifications_responder)
-    mock.get(f"{TRACCAR}/api/permissions").mock(side_effect=permissions_responder)

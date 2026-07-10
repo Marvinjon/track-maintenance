@@ -1,12 +1,8 @@
 """Thin typed wrapper around the Traccar REST API.
 
-Two modes:
-- ``as_user(credential)``: forwards the caller's own Traccar credentials
-  (session cookie or bearer token). Used for session validation and device
-  visibility — i.e. every user-facing authorization decision.
-- ``as_admin()``: optional service token (``TRACCAR_ADMIN_TOKEN``) for
-  background jobs and Traccar-entity mirroring, never for authorization.
-  User-facing flows use each caller's own credential instead.
+``as_user(credential)`` forwards the caller's own Traccar credentials
+(session cookie or bearer token). Used for session validation, device
+visibility, and all Traccar data reads/writes.
 
 All unit conversions between Traccar and this service live here:
 Traccar reports totalDistance in meters and engine hours in milliseconds;
@@ -69,16 +65,8 @@ class UserCredential:
         return hashlib.sha256(material.encode()).hexdigest()
 
 
-@dataclass(frozen=True)
-class NotificationRecipient:
-    """Traccar user who should receive a maintenance email for a device."""
-
-    traccar_user_id: int
-    email: str
-
-
 class TraccarClient:
-    """A client bound to one set of credentials (a user's, or the admin token)."""
+    """A client bound to one set of user credentials."""
 
     def __init__(
         self,
@@ -242,9 +230,7 @@ class TraccarClient:
             f"Traccar rejected maintenance deletion ({last_status})"
         )
 
-    # -- Permissions / users / notifications --------------------------------
-
-    _MAINTENANCE_NOTIFICATION_TYPES = frozenset({"maintenance"})
+    # -- Permissions --------------------------------------------------------
 
     async def list_permissions(self, **params: int) -> list[dict[str, Any]]:
         """Fetch permission links (e.g. deviceId + notificationId=0)."""
@@ -254,97 +240,6 @@ class TraccarClient:
             return []
         body = response.json()
         return body if isinstance(body, list) else []
-
-    async def list_all_notifications(self) -> list[dict[str, Any]]:
-        response = await self._request("GET", "/api/notifications", params={"all": True})
-        self._check_5xx(response)
-        if response.status_code != 200:
-            return []
-        body = response.json()
-        return body if isinstance(body, list) else []
-
-    async def list_all_users(self) -> list[dict[str, Any]]:
-        response = await self._request("GET", "/api/users", params={"all": True})
-        self._check_5xx(response)
-        if response.status_code != 200:
-            return []
-        body = response.json()
-        return body if isinstance(body, list) else []
-
-    @staticmethod
-    def _notification_has_mail(notificators: str | None) -> bool:
-        if not notificators:
-            return False
-        return "mail" in {part.strip() for part in notificators.split(",") if part.strip()}
-
-    async def list_maintenance_email_recipients(
-        self, device_id: int
-    ) -> list[NotificationRecipient]:
-        """Users who should receive maintenance emails for a device.
-
-        Matches Traccar's model: maintenance notifications linked to the device
-        with the mail channel, then the users linked to those notifications.
-        If no such notifications exist, falls back to users with direct device
-        access (still tenant-scoped — other companies never see the device).
-        """
-        notifications_by_id = {
-            item["id"]: item
-            for item in await self.list_all_notifications()
-            if isinstance(item.get("id"), int)
-        }
-        users_by_id = {
-            item["id"]: item
-            for item in await self.list_all_users()
-            if isinstance(item.get("id"), int)
-        }
-
-        device_notification_links = await self.list_permissions(
-            deviceId=device_id, notificationId=0
-        )
-        maintenance_notification_ids: list[int] = []
-        for link in device_notification_links:
-            notification_id = link.get("notificationId")
-            if not isinstance(notification_id, int):
-                continue
-            notification = notifications_by_id.get(notification_id)
-            if notification is None:
-                continue
-            if notification.get("type") not in self._MAINTENANCE_NOTIFICATION_TYPES:
-                continue
-            if not self._notification_has_mail(notification.get("notificators")):
-                continue
-            maintenance_notification_ids.append(notification_id)
-
-        user_ids: set[int] = set()
-        if maintenance_notification_ids:
-            for notification_id in maintenance_notification_ids:
-                for link in await self.list_permissions(
-                    notificationId=notification_id, userId=0
-                ):
-                    user_id = link.get("userId")
-                    if isinstance(user_id, int):
-                        user_ids.add(user_id)
-        else:
-            for link in await self.list_permissions(deviceId=device_id, userId=0):
-                user_id = link.get("userId")
-                if isinstance(user_id, int):
-                    user_ids.add(user_id)
-
-        recipients: list[NotificationRecipient] = []
-        seen_emails: set[str] = set()
-        for user_id in sorted(user_ids):
-            user = users_by_id.get(user_id)
-            if user is None or user.get("disabled"):
-                continue
-            email = (user.get("email") or "").strip()
-            if not email:
-                continue
-            normalized = email.casefold()
-            if normalized in seen_emails:
-                continue
-            seen_emails.add(normalized)
-            recipients.append(NotificationRecipient(traccar_user_id=user_id, email=email))
-        return recipients
 
     async def create_permission(self, data: dict[str, Any]) -> None:
         """Bind entities, e.g. {"deviceId": ..., "maintenanceId": ...}."""
@@ -387,13 +282,8 @@ class TraccarClient:
 class TraccarService:
     """Factory producing credential-bound clients."""
 
-    def __init__(self, base_url: str, admin_token: str) -> None:
+    def __init__(self, base_url: str) -> None:
         self._base_url = base_url
-        self._admin_token = admin_token
-
-    @property
-    def has_admin_token(self) -> bool:
-        return bool(self._admin_token.strip())
 
     def as_user(self, credential: UserCredential) -> TraccarClient:
         headers: dict[str, str] = {}
@@ -403,12 +293,6 @@ class TraccarService:
         elif credential.session_cookie:
             cookies["JSESSIONID"] = credential.session_cookie
         return TraccarClient(self._base_url, headers=headers, cookies=cookies)
-
-    def as_admin(self) -> TraccarClient:
-        return TraccarClient(
-            self._base_url,
-            headers={"Authorization": f"Bearer {self._admin_token}"},
-        )
 
     async def ping(self) -> bool:
         """Reachability check (GET /api/server needs no auth)."""
@@ -450,4 +334,4 @@ class TraccarService:
 
 def get_traccar() -> TraccarService:
     settings = get_settings()
-    return TraccarService(settings.traccar_url, settings.traccar_admin_token)
+    return TraccarService(settings.traccar_url)

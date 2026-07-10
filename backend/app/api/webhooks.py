@@ -21,7 +21,6 @@ from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.db import get_db
 from app.models import Reminder, ReminderStatus, Vehicle, WebhookEvent
-from app.services.notifications import notify_reminders_for_vehicle
 from app.services.vehicles import active_vehicle_for_device
 
 logger = logging.getLogger(__name__)
@@ -100,11 +99,7 @@ async def receive_traccar_event(
         )
 
         if event_type == "maintenance" and device_id is not None:
-            vehicle, updated_ids = _mark_reminders_overdue(db, device_id, maintenance_id)
-            if vehicle is not None and updated_ids:
-                await notify_reminders_for_vehicle(
-                    db, vehicle, reminder_ids=updated_ids, force=True
-                )
+            _mark_reminders_overdue(db, device_id, maintenance_id)
 
         db.commit()
     except Exception:

@@ -150,16 +150,12 @@ async def sync_vehicle(
     db: Session,
     vehicle: Vehicle,
     traccar: TraccarService,
-    credential: UserCredential | None = None,
+    credential: UserCredential,
 ) -> bool:
     """Sync one vehicle. Returns True if a position was found and applied."""
-    if credential is not None:
-        client = traccar.as_user(credential)
-    elif traccar.has_admin_token:
-        client = traccar.as_admin()
-    else:
-        return False
-    position = await client.get_latest_position(vehicle.traccar_device_id)
+    position = await traccar.as_user(credential).get_latest_position(
+        vehicle.traccar_device_id
+    )
     if position is None:
         return False
     apply_position_to_vehicle(vehicle, position)

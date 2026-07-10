@@ -23,7 +23,6 @@ class Settings(BaseSettings):
     traccar_url: str = "http://127.0.0.1:8082"
     # User-facing Traccar hostname for deep links (e.g. https://gps.example.com).
     traccar_public_url: str = ""
-    traccar_admin_token: str = ""
     webhook_secret: str = ""
     bind_host: str = "127.0.0.1"
     bind_port: int = 8000
@@ -33,22 +32,10 @@ class Settings(BaseSettings):
     cors_origins: str = ""
     # Set true in production (HTTPS) so the login session cookie is Secure-only.
     session_cookie_secure: bool = False
-    # SMTP email notifications for due/overdue maintenance (optional).
-    smtp_host: str = ""
-    smtp_port: int = 587
-    smtp_user: str = ""
-    smtp_password: str = ""
-    smtp_from: str = ""
-    smtp_use_tls: bool = True
-    notification_cooldown_hours: int = 24
 
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
-
-    @property
-    def smtp_configured(self) -> bool:
-        return bool(self.smtp_host)
 
     @property
     def is_production(self) -> bool:

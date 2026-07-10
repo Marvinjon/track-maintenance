@@ -2,7 +2,6 @@ import logging
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import APIRouter, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -20,13 +19,10 @@ from app.api import (
     webhooks,
 )
 from app.config import get_settings, validate_production_settings
-from app.services.notifications import run_scheduled_notifications
 from app.services.traccar import TraccarUnavailable
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-ODOMETER_SYNC_INTERVAL_MINUTES = 30
 
 
 @asynccontextmanager
@@ -35,35 +31,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     validate_production_settings(settings)
     if settings.is_production:
         logger.info("Running in production mode (OpenAPI docs disabled)")
-
-    # In-process scheduler — the reason this app must run as a single
-    # process (see backend/Dockerfile).
-    scheduler = AsyncIOScheduler()
-    scheduler_started = False
-    if settings.traccar_admin_token.strip():
-        scheduler.add_job(
-            run_scheduled_notifications,
-            "interval",
-            minutes=ODOMETER_SYNC_INTERVAL_MINUTES,
-            id="maintenance_notifications",
-            coalesce=True,
-            max_instances=1,
-        )
-        scheduler.start()
-        scheduler_started = True
-        logger.info(
-            "Maintenance email notifications scheduled every %d minutes",
-            ODOMETER_SYNC_INTERVAL_MINUTES,
-        )
-    else:
-        logger.info(
-            "TRACCAR_ADMIN_TOKEN not set; maintenance email notifications disabled"
-        )
-    try:
-        yield
-    finally:
-        if scheduler_started:
-            scheduler.shutdown(wait=False)
+    yield
 
 
 def create_app() -> FastAPI:

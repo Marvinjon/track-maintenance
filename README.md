@@ -19,7 +19,7 @@ Open-source companion service for [Traccar](https://www.traccar.org/) GPS fleet 
 
 | Layer | Technology |
 |-------|------------|
-| Backend | Python 3.12, FastAPI, SQLAlchemy 2.x, Alembic, APScheduler |
+| Backend | Python 3.12, FastAPI, SQLAlchemy 2.x, Alembic |
 | Frontend | React 18, TypeScript, Vite, MUI, TanStack Query |
 | Database | MySQL 8, dedicated `track_maintenance` schema |
 | Deploy | Docker backend (host networking) + static frontend on Nginx |
@@ -43,17 +43,7 @@ FLUSH PRIVILEGES;
 
 Grant only on `track_maintenance` — never on Traccar's schema.
 
-### 2. Traccar admin token (optional)
-
-Users log in with their own Traccar email/password or API token — no server-side admin token is required for vehicle list, odometer sync, catalog scoping, or pushing service data back to Traccar.
-
-Set `TRACCAR_ADMIN_TOKEN` only if you want maintenance email notifications:
-
-1. Log in to Traccar as an administrator.
-2. Account settings → generate an API token.
-3. Set `TRACCAR_ADMIN_TOKEN` in `.env`.
-
-### 3. Event forwarding
+### 2. Event forwarding
 
 Add to Traccar's `traccar.xml`:
 
@@ -64,16 +54,15 @@ Add to Traccar's `traccar.xml`:
 
 Use the same secret as `WEBHOOK_SECRET` in `.env` (`openssl rand -hex 32`).
 
-### 4. Environment
+### 3. Environment
 
 ```bash
 cp .env.example .env
 # Fill in DATABASE_URL, WEBHOOK_SECRET, CORS_ORIGINS, APP_ENV=production
-# TRACCAR_ADMIN_TOKEN is optional — see step 2 above
 chmod 600 .env
 ```
 
-### 5. Deploy
+### 4. Deploy
 
 **Backend:**
 
@@ -158,7 +147,6 @@ For Traccar deep links ("View in Traccar"), set `TRACCAR_PUBLIC_URL` in the back
 | `DATABASE_URL` | e.g. `mysql+pymysql://maint_user:***@127.0.0.1:3306/track_maintenance` |
 | `TRACCAR_URL` | Internal Traccar URL, usually `http://127.0.0.1:8082` |
 | `TRACCAR_PUBLIC_URL` | User-facing Traccar URL for deep links (optional) |
-| `TRACCAR_ADMIN_TOKEN` | Optional — enables maintenance email notifications |
 | `WEBHOOK_SECRET` | Shared secret for Traccar event forwarding |
 | `BIND_HOST` / `BIND_PORT` | Uvicorn bind address (`127.0.0.1:8000` in production) |
 | `CORS_ORIGINS` | Comma-separated allowed origins |
@@ -170,7 +158,7 @@ Full list: [.env.example](.env.example).
 
 - **Auth:** Users sign in with Traccar email/password. The backend validates against Traccar and issues a `maint_session` cookie.
 - **Devices:** Vehicle visibility matches Traccar — user A never sees user B's devices.
-- **Reminders:** Traccar maintenance schedules are pulled every 30 minutes (and on demand). Traccar-linked reminders are read-only in this app; local-only reminders are also supported.
+- **Reminders:** Traccar maintenance schedules are pulled on demand and in the background when each user logs in or restores their session. Traccar-linked reminders are read-only in this app; local-only reminders are also supported.
 - **Odometer & maintenance:** Refreshed in the background when each user logs in or restores their session (and on demand per vehicle).
 - **Webhooks:** Traccar `event.forward` marks reminders overdue; the webhook must stay localhost-only (Nginx returns 403 externally).
 

@@ -135,7 +135,7 @@ async def sync_vehicle_maintenances(
     db: Session,
     vehicle: Vehicle,
     traccar: TraccarService,
-    credential: UserCredential | None = None,
+    credential: UserCredential,
     *,
     prune_missing: bool = True,
 ) -> MaintenanceSyncResult:
@@ -143,15 +143,11 @@ async def sync_vehicle_maintenances(
     result = MaintenanceSyncResult()
     if vehicle.archived:
         return result
-    if credential is not None:
-        client = traccar.as_user(credential)
-    elif traccar.has_admin_token:
-        client = traccar.as_admin()
-    else:
-        return result
 
     try:
-        maintenances = await client.list_maintenances(vehicle.traccar_device_id)
+        maintenances = await traccar.as_user(credential).list_maintenances(
+            vehicle.traccar_device_id
+        )
     except TraccarPermissionDenied:
         logger.info(
             "Skipping maintenance sync for vehicle %s: caller cannot list Traccar schedules",

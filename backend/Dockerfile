@@ -18,9 +18,7 @@ RUN pip install --no-cache-dir --upgrade pip \
 # Final image: clean base + venv + app code only. Runs as non-root.
 #
 # IMPORTANT: this service must run as a SINGLE process (no --workers > 1).
-# APScheduler runs in-process (odometer sync, from Phase 2 on); multiple
-# workers would run the scheduler multiple times. The in-memory auth caches
-# also assume one process.
+# The in-memory auth caches assume one process.
 #
 # Migrations are NOT run on start. Run them deliberately as a one-off:
 #   docker compose run --rm backend alembic upgrade head

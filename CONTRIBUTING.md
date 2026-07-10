@@ -47,7 +47,7 @@ Tests use mocked Traccar and an in-memory SQLite database — no live MySQL or T
 - Match existing naming, error handling, and patterns in neighboring files.
 - User-visible strings belong in `frontend/src/i18n/` (not hardcoded in JSX).
 - Backend schema changes need an Alembic migration in `backend/app/alembic/versions/`.
-- Do not add uvicorn workers (breaks APScheduler and in-memory caches).
+- Do not add uvicorn workers (breaks in-memory auth caches).
 - Never query or write to Traccar's database — integration is REST API only.
 
 ## License

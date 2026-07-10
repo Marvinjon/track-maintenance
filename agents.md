@@ -14,14 +14,14 @@ A **standalone companion service** for an existing [Traccar](https://www.traccar
 
 - Do **not** write to Traccar's database or join across schemas in SQL.
 - Reference Traccar devices only by numeric `traccar_device_id`; fetch live device data via Traccar's REST API.
-- User-facing authorization always uses the **caller's** Traccar credentials (session or bearer token). `TRACCAR_ADMIN_TOKEN` is for background jobs only (odometer sync, reminder mirroring).
+- User-facing authorization always uses the **caller's** Traccar credentials (session or bearer token). All Traccar API reads and writes use the authenticated user's credential.
 - Multi-tenancy must match Traccar: user A must never see or modify user B's devices.
 
 ## Tech stack
 
 | Layer | Stack |
 |-------|-------|
-| Backend | Python 3.12, FastAPI, SQLAlchemy 2.x, Alembic, Pydantic v2, httpx, APScheduler |
+| Backend | Python 3.12, FastAPI, SQLAlchemy 2.x, Alembic, Pydantic v2, httpx |
 | Database | MySQL 8, schema `track_maintenance` (separate user, grants only on this schema) |
 | Frontend | React 18, TypeScript, Vite, TanStack Query, **MUI** (Material UI), react-router-dom |
 | Deploy | Docker backend (`network_mode: host`), static frontend on host Nginx |
@@ -41,7 +41,7 @@ track-maintenance/
 │   └── nginx.conf.example # host Nginx vhost
 ├── backend/
 │   ├── app/
-│   │   ├── main.py        # FastAPI app, router wiring, APScheduler lifespan
+│   │   ├── main.py        # FastAPI app, router wiring
 │   │   ├── config.py      # pydantic-settings (loads repo-root .env)
 │   │   ├── db.py          # SQLAlchemy engine + get_db dependency
 │   │   ├── models/        # ORM models
@@ -71,7 +71,7 @@ The README still mentions "Phase 1 only"; the codebase has moved well beyond tha
 | Area | Status |
 |------|--------|
 | Auth (login, `maint_session` cookie, bearer support) | Done |
-| Vehicles CRUD, odometer sync (endpoint + 30-min scheduler) | Done |
+| Vehicles CRUD, odometer sync (endpoint + per-user background sync) | Done |
 | Maintenance records CRUD + change audit (`record_changes`) | Done |
 | Service types CRUD | Done |
 | Parts, stock movements, low-stock | Done |
@@ -80,15 +80,15 @@ The README still mentions "Phase 1 only"; the codebase has moved well beyond tha
 | Frontend pages (vehicles, detail, parts, low stock, reminders, services) | Done |
 | Reports (`GET /reports/costs`) | Not implemented (spec phase 4 stub) |
 
-Alembic migrations: `0001_initial_schema`, `0002_reminder_sync_error`, `0003_record_changes`.
+Alembic migrations: `0001` through `0011` (see `backend/app/alembic/versions/`).
 
 ## Backend architecture
 
 ### Entry point
 
-`backend/app/main.py` — mounts all routers under `/api/v1`, configures CORS, handles `TraccarUnavailable` → 502, starts in-process APScheduler for odometer sync.
+`backend/app/main.py` — mounts all routers under `/api/v1`, configures CORS, handles `TraccarUnavailable` → 502.
 
-**Important:** run as a **single uvicorn process** (no workers). APScheduler and in-memory auth caches assume one process.
+**Important:** run as a **single uvicorn process** (no workers). In-memory auth caches assume one process.
 
 ### API routes (`backend/app/api/`)
 
@@ -119,9 +119,11 @@ OpenAPI docs: `http://127.0.0.1:8000/docs` when the backend is running.
 
 | File | Role |
 |------|------|
-| `traccar.py` | httpx client: `as_user()` / `as_admin()`, unit conversions (m→km, ms→h) |
-| `odometer_sync.py` | Scheduled + on-demand odometer/engine-hours pull; reminder status recompute |
-| `reminders.py` | Create/update/delete Traccar maintenance entities via admin token |
+| `traccar.py` | httpx client: `as_user()`, unit conversions (m→km, ms→h) |
+| `odometer_sync.py` | On-demand odometer/engine-hours pull; reminder status recompute |
+| `user_sync.py` | Background odometer + maintenance pull after login/session restore |
+| `maintenance_sync.py` | Pull Traccar maintenance schedules into local reminders |
+| `reminders.py` | Local reminder helpers; push maintenance `start` to Traccar after service |
 | `stock.py` | Stock level = `SUM(stock_movements.quantity)` |
 | `record_audit.py` | Logs field-level changes on record updates |
 
@@ -228,9 +230,9 @@ Migrations are **never** auto-run on container start.
 
 ## Common agent pitfalls
 
-1. **Do not add uvicorn workers** — breaks APScheduler and in-memory caches.
+1. **Do not add uvicorn workers** — breaks in-memory auth caches.
 2. **Do not query Traccar's DB** — only REST API + webhooks.
-3. **Do not use admin token for user authorization** — always forward caller credentials.
+3. **Always forward caller credentials** to Traccar for authorization and data access.
 4. **Stock is derived** — never store a separate `current_stock` column; always `SUM(movements)`.
 5. **Traccar units** — distance in meters, hours in milliseconds when talking to Traccar API; convert in `services/traccar.py`.
 6. **Webhook route** — must stay reachable on localhost only; Nginx returns 403 externally.
@@ -247,4 +249,4 @@ Migrations are **never** auto-run on container start.
 | New UI page | `frontend/src/pages/`, wire route in `App.tsx`, API in `client.ts` + `types.ts` |
 | User-visible text | `frontend/src/strings.ts` |
 | Auth behavior | `backend/app/api/auth.py`, `backend/app/api/deps.py` |
-| Background jobs | `backend/app/services/odometer_sync.py`, lifespan in `main.py` |
+| Background sync | `backend/app/services/user_sync.py`, `backend/app/api/auth.py` |

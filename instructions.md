@@ -71,7 +71,7 @@ Do NOT build local user accounts. Piggyback on Traccar sessions:
    - If Traccar returns 200, the JSON body is the authenticated Traccar user (`id`, `name`, `email`, `administrator`). Cache this validation in-memory for 60 seconds keyed by token/cookie hash to avoid hammering Traccar.
    - If Traccar returns 4xx, respond 401.
 3. Device authorization: for any request touching a vehicle, verify the user can see that Traccar device by calling `GET {TRACCAR_URL}/api/devices?id=<deviceId>` **with the user's own credentials** (forwarded cookie/token). If Traccar returns it, they're authorized. Cache per user+device for 5 minutes.
-4. The service itself holds ONE admin token (`TRACCAR_ADMIN_TOKEN` env var) used ONLY by background jobs (odometer sync, reminder management) — never for user-facing authorization decisions.
+4. All Traccar API reads and writes (positions, maintenances, accumulators) use the **caller's own credentials** — there is no server-side admin token.
 
 ## 5. Database Schema (Alembic migration 0001)
 
@@ -142,7 +142,7 @@ All under `/api/v1`, all behind the auth dependency, all device-scoped per Secti
 
 **Maintenance records**
 - `GET /vehicles/{id}/records` (paginated, newest first)
-- `POST /vehicles/{id}/records` — body may include `parts: [{part_id, quantity}]`; create record + record_parts + stock movements in one transaction; if a linked reminder exists for that service type, reset it (update `last_service_*`, recompute status, and PUT the updated `start`/period to the Traccar maintenance entity via admin token).
+- `POST /vehicles/{id}/records` — body may include `parts: [{part_id, quantity}]`; create record + record_parts + stock movements in one transaction; if a linked reminder exists for that service type, reset it (update `last_service_*`, recompute status, and PUT the updated `start`/period to the Traccar maintenance entity using the caller's credential).
 - `PATCH /records/{id}`, `DELETE /records/{id}` (reverse stock movements on delete).
 
 **Parts & stock**
@@ -154,30 +154,27 @@ All under `/api/v1`, all behind the auth dependency, all device-scoped per Secti
 
 **Reminders**
 - `GET /vehicles/{id}/reminders`, `POST` (local-only), `PATCH`/`DELETE` (local-only; Traccar-linked rows are read-only).
-- `POST /vehicles/{id}/sync-maintenance` — pull maintenance schedules from Traccar (admin token, `GET /api/maintenances?deviceId=`).
-- Scheduled pull every 30 minutes for all non-archived vehicles. Upsert by `traccar_maintenance_id`; prune local Traccar-linked rows removed in Traccar.
+- `POST /vehicles/{id}/sync-maintenance` — pull maintenance schedules from Traccar (`GET /api/maintenances?deviceId=`) using the caller's credential.
+- Background pull after login/session restore for vehicles the user can see. Upsert by `traccar_maintenance_id`; prune local Traccar-linked rows removed in Traccar.
 - Logging a service resets matching reminders locally; if `traccar_maintenance_id` is set, also `PUT` the new `start` to Traccar.
 
 **Webhook**
-- `POST /webhooks/traccar` — receives Traccar `event.forward` JSON. Protect with a shared-secret query param or header (`WEBHOOK_SECRET` env var) since Traccar can't sign requests. Store raw payload in `webhook_events`. If `event.type == "maintenance"`, look up the vehicle by `event.deviceId` and set matching reminder status to `overdue`; optionally send notification email. Respond 200 fast; do processing inline (it's light) but never let an exception return 5xx repeatedly — log and return 200 after storing the raw event.
+- `POST /webhooks/traccar` — receives Traccar `event.forward` JSON. Protect with a shared-secret query param or header (`WEBHOOK_SECRET` env var) since Traccar can't sign requests. Store raw payload in `webhook_events`. If `event.type == "maintenance"`, look up the vehicle by `event.deviceId` and set matching reminder status to `overdue`. Respond 200 fast; do processing inline (it's light) but never let an exception return 5xx repeatedly — log and return 200 after storing the raw event.
 
 **Reports (phase 4, stub the routes)**
 - `GET /reports/costs?from=&to=&vehicle_id=` — total cost per vehicle per month.
 
 ## 7. Traccar API Client (`services/traccar.py`)
 
-Thin typed wrapper over httpx with two modes:
-- `as_user(cookie_or_token)` — forwards user credentials (session validation, device visibility, device list).
-- `as_admin()` — uses `TRACCAR_ADMIN_TOKEN` (Bearer) for: latest positions (`GET /api/positions?deviceId=`), maintenance list/update (`GET /api/maintenances?deviceId=`, `PUT /api/maintenances/{id}`), accumulators if needed.
+Thin typed wrapper over httpx:
+- `as_user(credential)` — forwards user credentials for session validation, device visibility, positions, maintenances, accumulators, and permission lookups.
 - Timeouts 10s, one retry on connect errors, raise a clean `TraccarUnavailable` exception mapped to HTTP 502 with a friendly message.
 - Unit conversions live here: Traccar totalDistance is meters, hours attribute is milliseconds. Expose km and hours only; convert back when writing maintenance entities.
 
-## 8. Background Jobs
+## 8. Background sync
 
-- **Odometer sync** (every 30 min): for all non-archived vehicles, fetch latest position via admin token, update `odometer_km_cached`, `engine_hours_cached`, `odometer_synced_at`. Recompute reminder statuses.
-- **Maintenance pull** (every 30 min): sync Traccar maintenance schedules into local reminders.
-- **Email notifications** (every 30 min, if SMTP configured): email Traccar users scoped to each vehicle (maintenance notifications with mail channel, or device access as fallback) when reminders are `due_soon` or `overdue`, with per-recipient `NOTIFICATION_COOLDOWN_HOURS` deduplication.
-- Make thresholds configurable via env (`DUE_SOON_KM=500`, `DUE_SOON_DAYS=14`).
+- **Per-user sync** (after login and `/auth/me`, throttled): for vehicles the user can see in Traccar, pull latest position and maintenance schedules using the user's credential; update cached odometer/engine hours and local reminders.
+- Make thresholds configurable via env (`DUE_SOON_KM=500`, `DUE_SOON_DAYS=14`, `DUE_SOON_HOURS=50`).
 
 ## 9. Frontend Pages (MVP)
 
@@ -200,7 +197,6 @@ The production deliverable is a **Docker deployment**: a production-grade backen
 # reachable on localhost from inside the backend container.
 DATABASE_URL=mysql+pymysql://maint_user:***@127.0.0.1:3306/track_maintenance
 TRACCAR_URL=http://127.0.0.1:8082
-TRACCAR_ADMIN_TOKEN=***
 WEBHOOK_SECRET=***
 BIND_HOST=127.0.0.1
 BIND_PORT=8000
@@ -215,7 +211,7 @@ Requirements for `backend/Dockerfile`:
 
 - Multi-stage build: builder stage installs dependencies into a venv (`python:3.12-slim` base, `pip install --no-cache-dir`), final stage copies only the venv + app code onto a clean `python:3.12-slim`.
 - Runs as a non-root user (`useradd -r appuser`), `USER appuser`.
-- `ENTRYPOINT` runs uvicorn directly: `uvicorn app.main:app --host ${BIND_HOST} --port ${BIND_PORT}` (single process is fine — APScheduler runs in-process, so do NOT use multiple workers; document this constraint in the Dockerfile comments).
+- `ENTRYPOINT` runs uvicorn directly: `uvicorn app.main:app --host ${BIND_HOST} --port ${BIND_PORT}` (single process; do NOT use multiple workers — in-memory auth caches assume one process; document this constraint in the Dockerfile comments).
 - Migrations are NOT run automatically on container start. Provide them as an explicit one-off command documented in the README: `docker compose run --rm backend alembic upgrade head`. This keeps upgrades deliberate and safe.
 - `HEALTHCHECK` hitting a `GET /api/v1/health` endpoint (implement it: returns 200 + DB connectivity check + Traccar reachability as informational fields).
 - Image must be self-contained: no bind-mounting source code in production; compose mounts only the `.env` file.
@@ -299,4 +295,4 @@ FLUSH PRIVILEGES;
 - Multi-tenancy test passes: user A cannot read/write vehicles for devices only visible to user B.
 - No SQL touches any table outside the `track_maintenance` schema (verify: the DB user literally has no grants elsewhere).
 - Webhook route is blocked at Nginx level for external requests (403) while reachable from localhost.
-- README covers: Docker build/upgrade flow, env vars, MySQL user creation, frontend build + copy to Nginx, the two Traccar config entries, how to create the Traccar admin token, and the bridge-networking fallback.
+- README covers: Docker build/upgrade flow, env vars, MySQL user creation, frontend build + copy to Nginx, the two Traccar config entries, and the bridge-networking fallback.

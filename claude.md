@@ -95,10 +95,9 @@ cd frontend && npm ci && npm run build
 
 ## Do not
 
-- Add uvicorn `--workers` (breaks scheduler + caches).
+- Add uvicorn `--workers` (breaks in-memory auth caches).
 - Grant the DB user access outside `track_maintenance`.
 - Store stock levels as a mutable column (ledger is source of truth).
-- Use `TRACCAR_ADMIN_TOKEN` for per-user authorization.
 - Commit `.env` (secrets).
 - Widen scope with unrelated refactors — keep diffs focused.
 

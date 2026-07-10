@@ -68,7 +68,7 @@ def _ctx(user: dict, tenant_user_id: int | None = None) -> AuthContext:
 
 
 def _service() -> TraccarService:
-    return TraccarService(TRACCAR, "admin-test-token")
+    return TraccarService(TRACCAR)
 
 
 async def test_device_access_denied_when_traccar_hides_device(traccar_mock):
