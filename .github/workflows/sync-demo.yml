@@ -1,0 +1,42 @@
+name: Sync demo branch
+
+# After every push to main, merge main into demo and push demo.
+# That push triggers the "Deploy demo" workflow on the demo branch.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-demo
+  cancel-in-progress: false
+
+jobs:
+  merge:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Merge main into demo and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          if ! git ls-remote --exit-code --heads origin demo >/dev/null 2>&1; then
+            echo "Remote demo branch does not exist yet — skipping sync."
+            echo "Push the demo branch once manually, then future main pushes will sync automatically."
+            exit 0
+          fi
+
+          git fetch origin demo
+          git checkout demo
+          git merge origin/main -m "Merge main into demo [automated]"
+
+          git push origin demo
