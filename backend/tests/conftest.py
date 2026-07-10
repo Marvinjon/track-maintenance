@@ -96,6 +96,7 @@ USER_A = {"id": 1, "name": "User A", "email": "a@example.com", "administrator": 
 USER_B = {"id": 2, "name": "User B", "email": "b@example.com", "administrator": False, "userLimit": 0}
 USER_MANAGER = {"id": 10, "name": "Manager M", "email": "m@example.com", "administrator": False, "userLimit": 10}
 USER_A_MANAGED = {"id": 11, "name": "User A2", "email": "a2@example.com", "administrator": False, "userLimit": 0}
+USER_OTHER = {"id": 4, "name": "User Other", "email": "other@example.com", "administrator": False, "userLimit": 0}
 USER_OTHER_MANAGER = {"id": 20, "name": "Manager N", "email": "n@example.com", "administrator": False, "userLimit": 10}
 USER_READONLY = {
     "id": 3,
