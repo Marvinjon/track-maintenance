@@ -37,6 +37,54 @@ jobs:
 
           git fetch origin demo
           git checkout demo
-          git merge origin/main -m "Merge main into demo [automated]"
+          git merge origin/main -m "Merge main into demo [automated]" || true
+
+          if git diff --name-only --diff-filter=U | grep -q .; then
+            echo "Merge conflicts detected — applying demo-branch resolution rules"
+
+            # Demo-only paths always keep the demo branch version.
+            demo_keep_ours=(
+              README.md
+              .github/workflows/demo.yml
+              frontend/package.json
+              frontend/vite.config.ts
+              frontend/src/vite-env.d.ts
+              frontend/src/api/auth.ts
+              frontend/src/api/errors.ts
+              frontend/src/api/client.ts
+              frontend/src/App.tsx
+              frontend/src/components/AppMenu.tsx
+              frontend/src/components/ReportsExportButton.tsx
+              frontend/src/i18n/en.ts
+              frontend/src/i18n/is.ts
+            )
+
+            for path in "${demo_keep_ours[@]}"; do
+              if git diff --name-only --diff-filter=U | grep -qx "$path"; then
+                git checkout --ours "$path"
+                git add "$path"
+              fi
+            done
+
+            if git diff --name-only --diff-filter=U | grep -q '^frontend/src/demo/'; then
+              git checkout --ours frontend/src/demo
+              git add frontend/src/demo
+            fi
+
+            # Everything else: take main's version.
+            while IFS= read -r file; do
+              [ -n "$file" ] || continue
+              git checkout --theirs "$file"
+              git add "$file"
+            done < <(git diff --name-only --diff-filter=U)
+
+            if git diff --name-only --diff-filter=U | grep -q .; then
+              echo "Unresolved merge conflicts:"
+              git diff --name-only --diff-filter=U
+              exit 1
+            fi
+
+            git commit -m "Merge main into demo [automated]"
+          fi
 
           git push origin demo
