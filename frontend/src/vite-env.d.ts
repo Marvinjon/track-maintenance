@@ -9,6 +9,8 @@ interface ImportMetaEnv {
   readonly VITE_LOGO_ALT?: string;
   readonly VITE_FAVICON_URL?: string;
   readonly VITE_PRIMARY_COLOR?: string;
+  readonly VITE_DEMO_MODE?: string;
+  readonly VITE_BASE_PATH?: string;
 }
 
 interface ImportMeta {

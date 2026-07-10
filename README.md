@@ -13,6 +13,7 @@ Open-source companion service for [Traccar](https://www.traccar.org/) GPS fleet 
 - Service reminders synced with Traccar maintenance entities
 - Fleet-wide views, CSV export, cost reports, and dashboard
 - Multi-tenant auth via Traccar credentials (session cookie or API token)
+- **Live demo** — static playground on GitHub Pages (no backend required)
 - **White-label ready** — custom app title, logo, favicon, and primary color at build time
 
 ## Stack
@@ -29,6 +30,51 @@ Open-source companion service for [Traccar](https://www.traccar.org/) GPS fleet 
 - A running [Traccar](https://www.traccar.org/) server (5.x+)
 - MySQL 8 on the same host (or reachable from the backend)
 - Nginx (or similar) for serving the frontend and proxying `/api/`
+
+## Live demo
+
+A fully interactive demo runs on GitHub Pages with seeded fleet data. No Traccar or MySQL needed — the frontend uses an in-memory mock API.
+
+**URL:** [marvinjon.github.io/track-maintenance](https://marvinjon.github.io/track-maintenance/) (after you enable GitHub Pages; see below)
+
+Changes persist in the browser session until you refresh or click **Reset demo**. Every push to the **`demo` branch** rebuilds and redeploys automatically via [.github/workflows/demo.yml](.github/workflows/demo.yml).
+
+The mock API and demo UI live only on the `demo` branch — `main` stays production-only.
+
+### Enable GitHub Pages (one-time)
+
+1. Repo **Settings → Pages**
+2. **Build and deployment → Source:** GitHub Actions
+3. Push to the `demo` branch (or run the **Deploy demo** workflow manually)
+
+If you fork the repo under a different name, update `VITE_BASE_PATH` in `.github/workflows/demo.yml` on the `demo` branch to `/<your-repo-name>/`.
+
+### Keep demo in sync with main
+
+When `main` gets new features, merge them into `demo`:
+
+```bash
+git checkout demo
+git merge main
+git push
+```
+
+Resolve any conflicts by keeping demo-specific files (`frontend/src/demo/`, demo hooks in `client.ts`, etc.).
+
+### Run the demo locally
+
+```bash
+cd frontend
+npm install
+npm run dev:demo
+```
+
+Open [http://localhost:5173](http://localhost:5173). Build the static demo bundle with `npm run build:demo`.
+
+| Variable | Purpose |
+|----------|---------|
+| `VITE_DEMO_MODE` | `true` swaps the API client for the in-memory mock |
+| `VITE_BASE_PATH` | Asset base path (e.g. `/track-maintenance/` for GitHub Pages project sites) |
 
 ## Quick start (production)
 

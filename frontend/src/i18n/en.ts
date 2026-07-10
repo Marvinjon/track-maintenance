@@ -40,6 +40,11 @@ export const en = {
   health: {
     traccarUnreachable: "Traccar unreachable",
   },
+  demo: {
+    banner:
+      "Demo mode — sample fleet data only. Changes are kept in memory until you refresh or reset.",
+    reset: "Reset demo",
+  },
   common: {
     loading: "Loading...",
     error: "Something went wrong",

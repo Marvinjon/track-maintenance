@@ -21,6 +21,7 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "react-router-dom";
 import { api } from "../api/client";
+import { isDemoMode } from "../demo/config";
 import { useStrings } from "../hooks/useLocale";
 import MenuItem from "./MenuItem";
 
@@ -126,7 +127,7 @@ export default function AppMenu({ userName, onLogout, onNavigate }: AppMenuProps
             {userName}
           </Typography>
         )}
-        {onLogout && (
+        {onLogout && !isDemoMode && (
           <ListItemButton onClick={onLogout}>
             <ListItemIcon>
               <LogoutIcon />

@@ -42,6 +42,11 @@ export const is = {
   health: {
     traccarUnreachable: "Traccar ekki aðgengilegt",
   },
+  demo: {
+    banner:
+      "Kynningarhamur — dæmagögn eingöngu. Breytingar eru geymdar í minni þar til þú endurhlæðir eða endurstillir.",
+    reset: "Endurstilla kynningu",
+  },
   common: {
     loading: "Hleð...",
     error: "Eitthvað fór úrskeiðis",

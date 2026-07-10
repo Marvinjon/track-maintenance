@@ -1,3 +1,5 @@
+import { isDemoMode } from "../demo/config";
+import { demoApi, demoFetchSession } from "../demo/api";
 import type {
   AppConfigResponse,
   CostReportDetailResponse,
@@ -34,26 +36,13 @@ import type {
   MaintenanceSyncResult,
   ImportResult,
 } from "./types";
+import type { AuthUser } from "./auth";
+import { ApiError } from "./errors";
+
+export type { AuthUser } from "./auth";
+export { ApiError } from "./errors";
 
 const BASE_URL = "/api/v1";
-
-export type AuthUser = {
-  id: number;
-  name: string;
-  email: string;
-  administrator: boolean;
-  readonly: boolean;
-  device_readonly: boolean;
-};
-
-export class ApiError extends Error {
-  constructor(
-    public status: number,
-    message: string,
-  ) {
-    super(message);
-  }
-}
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${BASE_URL}${path}`, {
@@ -79,6 +68,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export async function fetchSession(): Promise<AuthUser | null> {
+  if (isDemoMode) {
+    return demoFetchSession();
+  }
   try {
     return await request<AuthUser>("/auth/me");
   } catch (error) {
@@ -89,7 +81,7 @@ export async function fetchSession(): Promise<AuthUser | null> {
   }
 }
 
-export const api = {
+const realApi = {
   login: (email: string, password: string) =>
     request<AuthUser>("/auth/login", {
       method: "POST",
@@ -238,4 +230,21 @@ export const api = {
     if (vehicleId !== undefined) params.set("vehicle_id", String(vehicleId));
     return `${BASE_URL}/reports/records/export?${params}`;
   },
+  downloadRecordsExport: async (from: string, to: string, vehicleId?: number) => {
+    const response = await fetch(realApi.exportRecordsUrl(from, to, vehicleId), {
+      credentials: "include",
+    });
+    if (!response.ok) {
+      throw new ApiError(response.status, `Export failed (${response.status})`);
+    }
+    const blob = await response.blob();
+    const header = response.headers.get("Content-Disposition");
+    const match = header ? /filename="?([^";\n]+)"?/i.exec(header) : null;
+    return {
+      blob,
+      filename: match?.[1] ?? `maintenance-records-${from}-${to}.csv`,
+    };
+  },
 };
+
+export const api = isDemoMode ? demoApi : realApi;

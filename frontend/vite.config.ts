@@ -43,6 +43,7 @@ function brandingHtmlPlugin() {
 }
 
 export default defineConfig({
+  base: process.env.VITE_BASE_PATH || "/",
   plugins: [brandingHtmlPlugin(), react()],
   server: {
     // Dev only: forward API calls to a locally running backend.

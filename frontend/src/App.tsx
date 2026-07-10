@@ -2,6 +2,8 @@ import { useCallback, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { ApiError, api, fetchSession } from "./api/client";
+import { isDemoMode } from "./demo/config";
+import { DemoBanner } from "./demo/DemoBanner";
 import PageLayout from "./components/PageLayout";
 import { useAppMenu } from "./components/useAppMenu";
 import { CurrencyProvider } from "./hooks/useCurrency";
@@ -24,7 +26,9 @@ function ShellRoutes({ onLogout }: { onLogout: () => void }) {
   const menu = useAppMenu({ onLogout });
 
   return (
-    <Routes>
+    <>
+      {isDemoMode ? <DemoBanner /> : null}
+      <Routes>
       <Route
         path="/"
         element={
@@ -106,6 +110,7 @@ function ShellRoutes({ onLogout }: { onLogout: () => void }) {
         }
       />
     </Routes>
+    </>
   );
 }
 
@@ -142,7 +147,7 @@ function AuthenticatedApp() {
     );
   }
 
-  if (session.isError) {
+  if (session.isError && !isDemoMode) {
     const detail =
       session.error instanceof ApiError ? session.error.message : strings.common.error;
     return (
@@ -157,7 +162,7 @@ function AuthenticatedApp() {
     );
   }
 
-  if (loggedOut || !session.data) {
+  if (!isDemoMode && (loggedOut || !session.data)) {
     return (
       <LoginPage
         onSuccess={() => {
@@ -169,8 +174,8 @@ function AuthenticatedApp() {
   }
 
   return (
-    <CurrencyProvider userId={session.data.id}>
-      <BrowserRouter>
+    <CurrencyProvider userId={session.data!.id}>
+      <BrowserRouter basename={import.meta.env.BASE_URL}>
         <ShellRoutes onLogout={() => void handleLogout()} />
       </BrowserRouter>
     </CurrencyProvider>

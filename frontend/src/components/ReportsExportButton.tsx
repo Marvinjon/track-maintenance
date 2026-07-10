@@ -1,6 +1,7 @@
 import FileDownloadIcon from "@mui/icons-material/FileDownload";
 import { Button, ListItemText, Menu, MenuItem } from "@mui/material";
 import { useState } from "react";
+import { api } from "../api/client";
 import { downloadTableExport, type ExportFormat } from "../export/tableExport";
 import { useStrings } from "../hooks/useLocale";
 
@@ -19,12 +20,6 @@ function downloadBlob(blob: Blob, filename: string) {
   link.download = filename;
   link.click();
   URL.revokeObjectURL(url);
-}
-
-function filenameFromContentDisposition(header: string | null): string | null {
-  if (!header) return null;
-  const match = /filename="?([^";\n]+)"?/i.exec(header);
-  return match?.[1] ?? null;
 }
 
 export function ReportsExportButton({
@@ -48,21 +43,8 @@ export function ReportsExportButton({
     }
   };
 
-  const recordsCsvUrl = () => {
-    const params = new URLSearchParams({ from: fromDate, to: toDate });
-    if (vehicleId !== undefined) params.set("vehicle_id", String(vehicleId));
-    return `/api/v1/reports/records/export?${params}`;
-  };
-
   const downloadRecordsCsv = async () => {
-    const response = await fetch(recordsCsvUrl(), { credentials: "include" });
-    if (!response.ok) {
-      throw new Error(`Export failed (${response.status})`);
-    }
-    const blob = await response.blob();
-    const filename =
-      filenameFromContentDisposition(response.headers.get("Content-Disposition")) ??
-      `maintenance-records-${fromDate}-${toDate}.csv`;
+    const { blob, filename } = await api.downloadRecordsExport(fromDate, toDate, vehicleId);
     downloadBlob(blob, filename);
   };
 

@@ -5,8 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:demo": "VITE_DEMO_MODE=true vite",
     "build": "tsc -b && vite build",
-    "preview": "vite preview"
+    "build:demo": "VITE_DEMO_MODE=true tsc -b && vite build",
+    "preview": "vite preview",
+    "preview:demo": "VITE_DEMO_MODE=true vite preview"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",
