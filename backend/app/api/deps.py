@@ -31,6 +31,24 @@ class TraccarUser:
     email: str
     administrator: bool
     user_limit: int
+    readonly: bool
+    device_readonly: bool
+
+
+def traccar_writes_disabled(user: TraccarUser) -> bool:
+    """True when Traccar blocks this user from editing devices or schedules."""
+    return user.readonly or user.device_readonly
+
+
+def require_traccar_write_access(ctx: "AuthContext") -> None:
+    """Raise 403 when the caller's Traccar account is read-only."""
+    if traccar_writes_disabled(ctx.user):
+        from app.services.traccar import TRACCAR_NO_PERMISSION_DETAIL
+
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=TRACCAR_NO_PERMISSION_DETAIL,
+        )
 
 
 @dataclass(frozen=True)
@@ -123,6 +141,8 @@ async def get_current_user(
         email=session.get("email", ""),
         administrator=bool(session.get("administrator", False)),
         user_limit=int(session.get("userLimit", 0)),
+        readonly=bool(session.get("readonly", False)),
+        device_readonly=bool(session.get("deviceReadonly", False)),
     )
     tenant_user_id = await resolve_tenant_user_id(
         traccar,

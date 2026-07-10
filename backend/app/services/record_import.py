@@ -13,7 +13,13 @@ from app.schemas.importing import ImportResult, ImportRowError, RecordImportRow
 from app.services.odometer_sync import apply_logged_odometer
 from app.services.reminders import reset_reminders_after_service
 from app.services.tenant_scope import list_visible_service_types
-from app.services.traccar import TraccarService
+from app.services.traccar import (
+    TraccarService,
+    TraccarPermissionDenied,
+    UserCredential,
+)
+
+TRACCAR_SYNC_WARNING_NO_PERMISSION = "no_traccar_permission"
 
 
 def _norm(value: str) -> str:
@@ -75,7 +81,8 @@ async def create_record_with_side_effects(
     notes: str | None,
     user_id: int,
     traccar: TraccarService,
-) -> MaintenanceRecord:
+    credential: UserCredential,
+) -> tuple[MaintenanceRecord, str | None]:
     record = MaintenanceRecord(
         vehicle_id=vehicle.id,
         service_type_id=service_type.id,
@@ -90,18 +97,29 @@ async def create_record_with_side_effects(
     db.add(record)
     db.flush()
 
+    traccar_sync_warning: str | None = None
     if record.odometer_km is not None:
-        await apply_logged_odometer(db, traccar, vehicle, record.odometer_km)
+        try:
+            await apply_logged_odometer(
+                db, traccar, vehicle, record.odometer_km, credential
+            )
+        except TraccarPermissionDenied:
+            traccar_sync_warning = TRACCAR_SYNC_WARNING_NO_PERMISSION
 
-    await reset_reminders_after_service(
-        db,
-        traccar,
-        vehicle,
-        service_type_id=service_type.id,
-        performed_at=record.performed_at,
-        odometer_km=record.odometer_km,
-    )
-    return record
+    try:
+        await reset_reminders_after_service(
+            db,
+            traccar,
+            vehicle,
+            service_type_id=service_type.id,
+            performed_at=record.performed_at,
+            odometer_km=record.odometer_km,
+            credential=credential,
+        )
+    except TraccarPermissionDenied:
+        traccar_sync_warning = TRACCAR_SYNC_WARNING_NO_PERMISSION
+
+    return record, traccar_sync_warning
 
 
 async def import_records(
@@ -111,7 +129,7 @@ async def import_records(
     user_id: int,
     tenant_user_id: int | None,
     traccar: TraccarService,
-    credential: str,
+    credential: UserCredential,
 ) -> ImportResult:
     if len(rows) > 500:
         raise HTTPException(
@@ -179,7 +197,7 @@ async def import_records(
                 raise ValueError("performed_by is too long")
             notes = _norm(row.notes) or None
 
-            await create_record_with_side_effects(
+            record, sync_warning = await create_record_with_side_effects(
                 db,
                 vehicle=vehicle,
                 service_type=service_type,
@@ -191,7 +209,15 @@ async def import_records(
                 notes=notes,
                 user_id=user_id,
                 traccar=traccar,
+                credential=credential,
             )
+            if sync_warning:
+                errors.append(
+                    ImportRowError(
+                        row=index,
+                        message="You do not have permission to update Traccar.",
+                    )
+                )
             created += 1
         except ValueError as exc:
             errors.append(ImportRowError(row=index, message=str(exc)))

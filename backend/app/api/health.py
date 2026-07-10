@@ -35,7 +35,7 @@ async def health(
         logger.exception("Health check: database unreachable")
         database_ok = False
 
-    traccar_reachable = await traccar.as_admin().ping()
+    traccar_reachable = await traccar.ping()
 
     if not database_ok:
         response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE

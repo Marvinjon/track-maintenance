@@ -20,9 +20,7 @@ from app.api import (
     webhooks,
 )
 from app.config import get_settings, validate_production_settings
-from app.services.maintenance_sync import run_scheduled_maintenance_sync
 from app.services.notifications import run_scheduled_notifications
-from app.services.odometer_sync import run_scheduled_sync
 from app.services.traccar import TraccarUnavailable
 
 logging.basicConfig(level=logging.INFO)
@@ -41,39 +39,31 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # In-process scheduler — the reason this app must run as a single
     # process (see backend/Dockerfile).
     scheduler = AsyncIOScheduler()
-    scheduler.add_job(
-        run_scheduled_sync,
-        "interval",
-        minutes=ODOMETER_SYNC_INTERVAL_MINUTES,
-        id="odometer_sync",
-        coalesce=True,
-        max_instances=1,
-    )
-    scheduler.add_job(
-        run_scheduled_maintenance_sync,
-        "interval",
-        minutes=ODOMETER_SYNC_INTERVAL_MINUTES,
-        id="maintenance_sync",
-        coalesce=True,
-        max_instances=1,
-    )
-    scheduler.add_job(
-        run_scheduled_notifications,
-        "interval",
-        minutes=ODOMETER_SYNC_INTERVAL_MINUTES,
-        id="maintenance_notifications",
-        coalesce=True,
-        max_instances=1,
-    )
-    scheduler.start()
-    logger.info(
-        "Odometer, maintenance sync, and notifications scheduled every %d minutes",
-        ODOMETER_SYNC_INTERVAL_MINUTES,
-    )
+    scheduler_started = False
+    if settings.traccar_admin_token.strip():
+        scheduler.add_job(
+            run_scheduled_notifications,
+            "interval",
+            minutes=ODOMETER_SYNC_INTERVAL_MINUTES,
+            id="maintenance_notifications",
+            coalesce=True,
+            max_instances=1,
+        )
+        scheduler.start()
+        scheduler_started = True
+        logger.info(
+            "Maintenance email notifications scheduled every %d minutes",
+            ODOMETER_SYNC_INTERVAL_MINUTES,
+        )
+    else:
+        logger.info(
+            "TRACCAR_ADMIN_TOKEN not set; maintenance email notifications disabled"
+        )
     try:
         yield
     finally:
-        scheduler.shutdown(wait=False)
+        if scheduler_started:
+            scheduler.shutdown(wait=False)
 
 
 def create_app() -> FastAPI:

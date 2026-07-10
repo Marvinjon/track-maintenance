@@ -97,6 +97,7 @@ export interface MaintenanceRecord {
   created_by_traccar_user_id: number;
   created_at: string;
   parts: RecordPart[];
+  traccar_sync_warning_code?: string | null;
 }
 
 export interface MaintenanceRecordDetail extends MaintenanceRecord {

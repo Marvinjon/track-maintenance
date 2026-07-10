@@ -42,6 +42,8 @@ export type AuthUser = {
   name: string;
   email: string;
   administrator: boolean;
+  readonly: boolean;
+  device_readonly: boolean;
 };
 
 export class ApiError extends Error {

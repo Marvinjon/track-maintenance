@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.api.deps import AuthorizedVehicle, CurrentUser, verify_device_access
+from app.api.deps import AuthorizedVehicle, CurrentUser, traccar_writes_disabled, verify_device_access
 from app.api.records import parts_by_record
 from app.db import get_db
 from app.models import MaintenanceRecord, Reminder, ReminderStatus, ServiceType, Vehicle
@@ -146,7 +146,13 @@ async def create_vehicle(
     db.add(vehicle)
     db.flush()
 
-    await sync_vehicle_maintenances(db, vehicle, traccar)
+    await sync_vehicle_maintenances(
+        db,
+        vehicle,
+        traccar,
+        ctx.credential,
+        prune_missing=not traccar_writes_disabled(ctx.user),
+    )
 
     if body.create_default_reminders:
         await create_default_reminders(db, vehicle)
@@ -195,7 +201,13 @@ async def bulk_create_vehicles(
         db.add(vehicle)
         db.flush()
 
-        await sync_vehicle_maintenances(db, vehicle, traccar)
+        await sync_vehicle_maintenances(
+            db,
+            vehicle,
+            traccar,
+            ctx.credential,
+            prune_missing=not traccar_writes_disabled(ctx.user),
+        )
 
         if body.create_default_reminders:
             await create_default_reminders(db, vehicle)
@@ -340,9 +352,15 @@ async def transfer_tracker(
     db.flush()
 
     if body.sync_odometer:
-        await sync_vehicle(db, new_vehicle, traccar)
+        await sync_vehicle(db, new_vehicle, traccar, ctx.credential)
 
-    await sync_vehicle_maintenances(db, new_vehicle, traccar)
+    await sync_vehicle_maintenances(
+        db,
+        new_vehicle,
+        traccar,
+        ctx.credential,
+        prune_missing=not traccar_writes_disabled(ctx.user),
+    )
 
     if body.create_default_reminders:
         await create_default_reminders(db, new_vehicle)
@@ -406,11 +424,18 @@ async def list_log_service_types(
 @router.post("/{vehicle_id}/sync-maintenance")
 async def sync_maintenance(
     vehicle: AuthorizedVehicle,
+    ctx: CurrentUser,
     db: Annotated[Session, Depends(get_db)],
     traccar: Annotated[TraccarService, Depends(get_traccar)],
 ) -> dict[str, int]:
     """On-demand pull of maintenance schedules from Traccar."""
-    result = await sync_vehicle_maintenances(db, vehicle, traccar)
+    result = await sync_vehicle_maintenances(
+        db,
+        vehicle,
+        traccar,
+        ctx.credential,
+        prune_missing=not traccar_writes_disabled(ctx.user),
+    )
     db.commit()
     return {
         "synced": result.synced,
@@ -424,6 +449,7 @@ async def sync_maintenance(
 @router.post("/{vehicle_id}/sync-odometer", response_model=VehicleOut)
 async def sync_odometer(
     vehicle: AuthorizedVehicle,
+    ctx: CurrentUser,
     db: Annotated[Session, Depends(get_db)],
     traccar: Annotated[TraccarService, Depends(get_traccar)],
 ) -> VehicleOut:
@@ -432,7 +458,7 @@ async def sync_odometer(
     Reads attributes.totalDistance (m -> km, falling back to attributes.odometer)
     and attributes.hours (ms -> h).
     """
-    found = await sync_vehicle(db, vehicle, traccar)
+    found = await sync_vehicle(db, vehicle, traccar, ctx.credential)
     if not found:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

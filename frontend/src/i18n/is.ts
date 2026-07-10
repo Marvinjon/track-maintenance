@@ -200,6 +200,8 @@ export const is = {
     totalWithParts: (parts: string, labor: string) => `Varahlutir ${parts} + vinna ${labor}`,
     traccarResetHint:
       "Að skrá þetta viðhald endurstillir tengda Traccar viðhaldsskipulag fyrir þetta ökutæki.",
+    noTraccarPermission: "Þú hefur ekki heimild til að uppfæra Traccar.",
+    dismiss: "Loka",
     syncingOdometer: "Sæki nýjustu kílómetrastaðu úr Traccar…",
     syncOdometerFailed:
       "Tókst ekki að uppfæra kílómetrastaðu úr Traccar — nota síðasta þekkta gildi.",

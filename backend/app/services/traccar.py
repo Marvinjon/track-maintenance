@@ -4,8 +4,9 @@ Two modes:
 - ``as_user(credential)``: forwards the caller's own Traccar credentials
   (session cookie or bearer token). Used for session validation and device
   visibility — i.e. every user-facing authorization decision.
-- ``as_admin()``: uses the service's TRACCAR_ADMIN_TOKEN. Used ONLY by
+- ``as_admin()``: optional service token (``TRACCAR_ADMIN_TOKEN``) for
   background jobs and Traccar-entity mirroring, never for authorization.
+  User-facing flows use each caller's own credential instead.
 
 All unit conversions between Traccar and this service live here:
 Traccar reports totalDistance in meters and engine hours in milliseconds;
@@ -28,6 +29,16 @@ MS_PER_HOUR = 3_600_000.0
 
 class TraccarUnavailable(Exception):
     """Traccar could not be reached (connect error/timeout or 5xx)."""
+
+
+class TraccarPermissionDenied(Exception):
+    """Caller lacks Traccar edit permission (e.g. read-only user)."""
+
+    def __init__(self, detail: str | None = None) -> None:
+        super().__init__(detail or TRACCAR_NO_PERMISSION_DETAIL)
+
+
+TRACCAR_NO_PERMISSION_DETAIL = "You do not have permission to update Traccar."
 
 
 def meters_to_km(meters: float) -> float:
@@ -145,7 +156,7 @@ class TraccarClient:
         return None
 
     async def get_latest_position(self, device_id: int) -> dict[str, Any] | None:
-        """Latest known position for a device (admin use: odometer sync)."""
+        """Latest known position for a device visible to the bound credential."""
         response = await self._request("GET", "/api/positions", params={"deviceId": device_id})
         self._check_5xx(response)
         if response.status_code != 200:
@@ -161,20 +172,28 @@ class TraccarClient:
         except TraccarUnavailable:
             return False
 
-    # -- Maintenance (admin token) ------------------------------------------
+    # -- Maintenance ---------------------------------------------------------
     # Traccar maintenance entities use raw units: meters for totalDistance,
     # milliseconds for hours. Callers convert via km_to_meters/hours_to_ms.
 
     async def list_maintenances(self, device_id: int) -> list[dict[str, Any]]:
-        """Maintenance schedules linked to a device (admin token)."""
+        """Maintenance schedules linked to a device."""
+        last_status: int | None = None
         for path in ("/api/maintenances", "/api/maintenance"):
             response = await self._request(
                 "GET", path, params={"deviceId": device_id}
             )
             self._check_5xx(response)
+            if response.status_code == 403:
+                raise TraccarPermissionDenied()
             if response.status_code == 200:
                 body = response.json()
                 return body if isinstance(body, list) else []
+            last_status = response.status_code
+        if last_status is not None:
+            raise TraccarUnavailable(
+                f"Traccar rejected maintenance list ({last_status})"
+            )
         return []
 
     async def create_maintenance(self, data: dict[str, Any]) -> dict[str, Any]:
@@ -199,6 +218,8 @@ class TraccarClient:
         ):
             response = await self._request("PUT", path, json=data)
             self._check_5xx(response)
+            if response.status_code == 403:
+                raise TraccarPermissionDenied()
             if response.status_code == 200:
                 return response.json()
             last_status = response.status_code
@@ -221,7 +242,7 @@ class TraccarClient:
             f"Traccar rejected maintenance deletion ({last_status})"
         )
 
-    # -- Permissions / users / notifications (admin token) ------------------
+    # -- Permissions / users / notifications --------------------------------
 
     _MAINTENANCE_NOTIFICATION_TYPES = frozenset({"maintenance"})
 
@@ -355,6 +376,8 @@ class TraccarClient:
             "PUT", f"/api/devices/{device_id}/accumulators", json=payload
         )
         self._check_5xx(response)
+        if response.status_code == 403:
+            raise TraccarPermissionDenied()
         if response.status_code not in (200, 204):
             raise TraccarUnavailable(
                 f"Traccar rejected accumulator update ({response.status_code})"
@@ -367,6 +390,10 @@ class TraccarService:
     def __init__(self, base_url: str, admin_token: str) -> None:
         self._base_url = base_url
         self._admin_token = admin_token
+
+    @property
+    def has_admin_token(self) -> bool:
+        return bool(self._admin_token.strip())
 
     def as_user(self, credential: UserCredential) -> TraccarClient:
         headers: dict[str, str] = {}
@@ -382,6 +409,10 @@ class TraccarService:
             self._base_url,
             headers={"Authorization": f"Bearer {self._admin_token}"},
         )
+
+    async def ping(self) -> bool:
+        """Reachability check (GET /api/server needs no auth)."""
+        return await TraccarClient(self._base_url).ping()
 
     async def login(self, email: str, password: str) -> tuple[dict[str, Any], str] | None:
         """Authenticate with Traccar email/password. Returns user JSON and JSESSIONID."""

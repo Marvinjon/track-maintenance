@@ -1,4 +1,5 @@
 import {
+  Alert,
   Button,
   Dialog,
   DialogActions,
@@ -63,6 +64,7 @@ export function LogServiceModal({ vehicle, open, onClose }: Props) {
   const [performedBy, setPerformedBy] = useState("");
   const [notes, setNotes] = useState("");
   const [partRows, setPartRows] = useState<PartRow[]>([]);
+  const [syncWarning, setSyncWarning] = useState<string | null>(null);
 
   const odometerSyncQuery = useQuery({
     queryKey: ["log-service-odometer-sync", vehicle.id],
@@ -81,6 +83,7 @@ export function LogServiceModal({ vehicle, open, onClose }: Props) {
           : "",
       );
       setServiceTypeId("");
+      setSyncWarning(null);
     }
   }, [open, vehicle.id, vehicle.odometer_km_cached]);
 
@@ -124,7 +127,7 @@ export function LogServiceModal({ vehicle, open, onClose }: Props) {
           quantity: row.quantity,
         })),
       }),
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["records", vehicle.id] });
       queryClient.invalidateQueries({ queryKey: ["all-records"] });
       queryClient.invalidateQueries({ queryKey: ["vehicle", vehicle.id] });
@@ -133,6 +136,10 @@ export function LogServiceModal({ vehicle, open, onClose }: Props) {
       queryClient.invalidateQueries({ queryKey: ["reminders", vehicle.id] });
       queryClient.invalidateQueries({ queryKey: ["parts"] });
       queryClient.invalidateQueries({ queryKey: ["low-stock"] });
+      if (data.traccar_sync_warning_code === "no_traccar_permission") {
+        setSyncWarning(strings.logService.noTraccarPermission);
+        return;
+      }
       setServiceTypeId("");
       setCost("");
       setPerformedBy("");
@@ -151,6 +158,11 @@ export function LogServiceModal({ vehicle, open, onClose }: Props) {
       <DialogTitle>{strings.logService.title}</DialogTitle>
       <DialogContent>
         <Stack spacing={2} sx={{ mt: 1 }}>
+          {syncWarning && (
+            <Alert severity="warning" onClose={() => setSyncWarning(null)}>
+              {syncWarning}
+            </Alert>
+          )}
           <FormControl fullWidth size="small" required>
             <InputLabel>{strings.records.serviceType}</InputLabel>
             <Select
@@ -250,10 +262,22 @@ export function LogServiceModal({ vehicle, open, onClose }: Props) {
         </Button>
         <Button
           variant="contained"
-          onClick={() => mutation.mutate()}
-          disabled={mutation.isPending || !serviceTypeId || !performedAt}
+          onClick={() => {
+            if (syncWarning) {
+              setSyncWarning(null);
+              setServiceTypeId("");
+              setCost("");
+              setPerformedBy("");
+              setNotes("");
+              setPartRows([]);
+              onClose();
+              return;
+            }
+            mutation.mutate();
+          }}
+          disabled={mutation.isPending || (!syncWarning && (!serviceTypeId || !performedAt))}
         >
-          {strings.logService.submit}
+          {syncWarning ? strings.logService.dismiss : strings.logService.submit}
         </Button>
       </DialogActions>
     </Dialog>

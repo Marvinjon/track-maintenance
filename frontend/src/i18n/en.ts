@@ -198,6 +198,8 @@ export const en = {
     totalWithParts: (parts: string, labor: string) => `Parts ${parts} + labor ${labor}`,
     traccarResetHint:
       "Logging this service resets the linked Traccar maintenance schedule for this vehicle.",
+    noTraccarPermission: "You do not have permission to update Traccar.",
+    dismiss: "Close",
     syncingOdometer: "Pulling latest odometer from Traccar…",
     syncOdometerFailed: "Could not refresh odometer from Traccar — using last known value.",
   },

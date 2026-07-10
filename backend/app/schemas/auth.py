@@ -12,3 +12,5 @@ class UserResponse(BaseModel):
     name: str
     email: str
     administrator: bool
+    readonly: bool = False
+    device_readonly: bool = False

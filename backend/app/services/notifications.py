@@ -87,8 +87,11 @@ def send_email(msg: EmailMessage, recipients: list[str]) -> None:
 
 async def resolve_recipients_for_vehicle(vehicle: Vehicle) -> list[NotificationRecipient]:
     """Look up Traccar users who should be emailed for this vehicle."""
+    traccar = get_traccar()
+    if not traccar.has_admin_token:
+        return []
     try:
-        return await get_traccar().as_admin().list_maintenance_email_recipients(
+        return await traccar.as_admin().list_maintenance_email_recipients(
             vehicle.traccar_device_id
         )
     except TraccarUnavailable:

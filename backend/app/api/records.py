@@ -6,7 +6,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
-from app.api.deps import AuthorizedVehicle, CurrentUser, verify_device_access
+from app.api.deps import (
+    AuthorizedVehicle,
+    CurrentUser,
+    require_traccar_write_access,
+    verify_device_access,
+)
 from app.db import get_db
 from app.models import MaintenanceRecord, Part, RecordChange, RecordPart, ServiceType, Vehicle
 from app.schemas.importing import ImportResult, RecordImportRequest
@@ -28,7 +33,7 @@ from app.services.stock import (
     detach_movements_from_record,
     reverse_record_parts,
 )
-from app.services.traccar import TraccarService, get_traccar
+from app.services.traccar import TraccarPermissionDenied, TraccarService, get_traccar
 from app.services.tenant_scope import get_service_type
 
 router = APIRouter(tags=["records"])
@@ -191,9 +196,10 @@ async def create_record(
     plus the matching negative stock movements (single transaction — a failure
     anywhere rolls back everything). A reminder linked to the same service
     type is reset and its Traccar mirror updated."""
+    require_traccar_write_access(ctx)
     service_type = get_service_type(db, body.service_type_id, ctx.tenant_user_id)
 
-    record = await create_record_with_side_effects(
+    record, traccar_sync_warning = await create_record_with_side_effects(
         db,
         vehicle=vehicle,
         service_type=service_type,
@@ -205,6 +211,7 @@ async def create_record(
         notes=body.notes,
         user_id=ctx.user.id,
         traccar=traccar,
+        credential=ctx.credential,
     )
 
     apply_record_parts(
@@ -218,7 +225,11 @@ async def create_record(
     db.commit()
     db.refresh(record)
     parts_map = parts_by_record(db, [record.id])
-    return _to_out(record, service_type.name, parts_map.get(record.id, []))
+    return _to_out(
+        record,
+        service_type.name,
+        parts_map.get(record.id, []),
+    ).model_copy(update={"traccar_sync_warning_code": traccar_sync_warning})
 
 
 @router.post("/records/import", response_model=ImportResult)
@@ -229,6 +240,7 @@ async def import_records_endpoint(
     traccar: Annotated[TraccarService, Depends(get_traccar)],
 ) -> ImportResult:
     """Bulk import maintenance records from parsed CSV rows."""
+    require_traccar_write_access(ctx)
     return await import_records(
         db,
         rows=body.rows,
@@ -265,6 +277,7 @@ async def update_record(
     db: Annotated[Session, Depends(get_db)],
     traccar: Annotated[TraccarService, Depends(get_traccar)],
 ) -> RecordOut:
+    require_traccar_write_access(ctx)
     updates = body.model_dump(exclude_unset=True)
     new_parts = updates.pop("parts", None)
     odometer_km = updates.pop("odometer_km", None)
@@ -279,8 +292,14 @@ async def update_record(
         record.odometer_km = odometer_km
 
     vehicle = db.get(Vehicle, record.vehicle_id)
+    traccar_sync_warning: str | None = None
     if odometer_km is not None and vehicle is not None:
-        await apply_logged_odometer(db, traccar, vehicle, odometer_km)
+        try:
+            await apply_logged_odometer(
+                db, traccar, vehicle, odometer_km, ctx.credential
+            )
+        except TraccarPermissionDenied:
+            traccar_sync_warning = "no_traccar_permission"
 
     if new_parts is not None:
         # Replace parts: reverse the old movements, apply the new set.
@@ -304,7 +323,7 @@ async def update_record(
         record,
         service_type.name if service_type else None,
         parts_map.get(record.id, []),
-    )
+    ).model_copy(update={"traccar_sync_warning_code": traccar_sync_warning})
 
 
 @router.delete("/records/{record_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -315,6 +334,7 @@ async def delete_record(
 ) -> None:
     """Delete a record, reversing its stock movements with compensating
     ledger entries (the ledger itself is append-only and survives)."""
+    require_traccar_write_access(ctx)
     reverse_record_parts(db, record, ctx.user.id)
     db.flush()
     detach_movements_from_record(db, record)

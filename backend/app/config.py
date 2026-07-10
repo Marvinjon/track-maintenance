@@ -61,8 +61,6 @@ def validate_production_settings(settings: Settings) -> None:
         return
 
     errors: list[str] = []
-    if not settings.traccar_admin_token.strip():
-        errors.append("TRACCAR_ADMIN_TOKEN must be set in production")
     if not settings.webhook_secret.strip():
         errors.append("WEBHOOK_SECRET must be set in production")
     if "change-me" in settings.database_url:

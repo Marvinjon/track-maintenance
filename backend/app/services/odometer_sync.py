@@ -1,9 +1,7 @@
 """Odometer/engine-hours sync from Traccar + reminder status recomputation.
 
-Used by the on-demand endpoint (POST /vehicles/{id}/sync-odometer) and by the
-in-process APScheduler job that runs every 30 minutes. Both paths use the
-admin token — the position fetch is a background concern, authorization for
-the endpoint is checked separately with the user's own credentials.
+Uses the caller's own Traccar credential (session or API token). Background
+refresh is triggered per user on login and session restore.
 """
 
 import logging
@@ -18,7 +16,8 @@ from app.config import get_settings
 from app.models import Reminder, ReminderStatus, Vehicle
 from app.services.traccar import (
     TraccarService,
-    get_traccar,
+    TraccarPermissionDenied,
+    UserCredential,
     km_to_meters,
     meters_to_km,
     ms_to_hours,
@@ -58,22 +57,16 @@ def apply_odometer_to_vehicle(vehicle: Vehicle, odometer_km: Decimal) -> None:
 
 
 async def push_odometer_to_traccar(
-    traccar: TraccarService, vehicle: Vehicle, odometer_km: Decimal
+    traccar: TraccarService,
+    vehicle: Vehicle,
+    odometer_km: Decimal,
+    credential: UserCredential,
 ) -> None:
-    """Push odometer to Traccar device accumulators via admin token.
-
-    Best-effort: failures are logged but do not block the caller.
-    """
-    try:
-        await traccar.as_admin().update_device_accumulators(
-            vehicle.traccar_device_id,
-            total_distance_m=km_to_meters(float(odometer_km)),
-        )
-    except Exception:
-        logger.exception(
-            "Failed to push odometer to Traccar for device %s",
-            vehicle.traccar_device_id,
-        )
+    """Push odometer to Traccar device accumulators using the caller's credential."""
+    await traccar.as_user(credential).update_device_accumulators(
+        vehicle.traccar_device_id,
+        total_distance_m=km_to_meters(float(odometer_km)),
+    )
 
 
 async def apply_logged_odometer(
@@ -81,10 +74,19 @@ async def apply_logged_odometer(
     traccar: TraccarService,
     vehicle: Vehicle,
     odometer_km: Decimal,
+    credential: UserCredential,
 ) -> None:
     """Apply a logged odometer reading locally and mirror it to Traccar."""
     apply_odometer_to_vehicle(vehicle, odometer_km)
-    await push_odometer_to_traccar(traccar, vehicle, odometer_km)
+    try:
+        await push_odometer_to_traccar(traccar, vehicle, odometer_km, credential)
+    except TraccarPermissionDenied:
+        raise
+    except Exception:
+        logger.exception(
+            "Failed to push odometer to Traccar for device %s",
+            vehicle.traccar_device_id,
+        )
     recompute_vehicle_reminders(db, vehicle)
 
 
@@ -144,45 +146,22 @@ def recompute_vehicle_reminders(db: Session, vehicle: Vehicle) -> None:
         reminder.status = compute_reminder_status(reminder, vehicle)
 
 
-async def sync_vehicle(db: Session, vehicle: Vehicle, traccar: TraccarService) -> bool:
+async def sync_vehicle(
+    db: Session,
+    vehicle: Vehicle,
+    traccar: TraccarService,
+    credential: UserCredential | None = None,
+) -> bool:
     """Sync one vehicle. Returns True if a position was found and applied."""
-    position = await traccar.as_admin().get_latest_position(vehicle.traccar_device_id)
+    if credential is not None:
+        client = traccar.as_user(credential)
+    elif traccar.has_admin_token:
+        client = traccar.as_admin()
+    else:
+        return False
+    position = await client.get_latest_position(vehicle.traccar_device_id)
     if position is None:
         return False
     apply_position_to_vehicle(vehicle, position)
     recompute_vehicle_reminders(db, vehicle)
     return True
-
-
-async def sync_all_vehicles(db: Session, traccar: TraccarService) -> int:
-    """Sync every non-archived vehicle. Returns the number synced."""
-    vehicles = (
-        db.execute(select(Vehicle).where(Vehicle.archived.is_(False))).scalars().all()
-    )
-    synced = 0
-    for vehicle in vehicles:
-        try:
-            if await sync_vehicle(db, vehicle, traccar):
-                synced += 1
-        except Exception:
-            logger.exception(
-                "Odometer sync failed for vehicle %s (device %s)",
-                vehicle.id,
-                vehicle.traccar_device_id,
-            )
-    db.commit()
-    return synced
-
-
-async def run_scheduled_sync() -> None:
-    """Entry point for the APScheduler job (owns its DB session)."""
-    from app.db import SessionLocal
-
-    db = SessionLocal()
-    try:
-        synced = await sync_all_vehicles(db, get_traccar())
-        logger.info("Scheduled odometer sync completed: %d vehicles updated", synced)
-    except Exception:
-        logger.exception("Scheduled odometer sync failed")
-    finally:
-        db.close()

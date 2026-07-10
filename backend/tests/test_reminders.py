@@ -7,7 +7,7 @@ from httpx import Response
 from sqlalchemy import select
 
 from app.models import Reminder, ReminderStatus, ServiceType, Vehicle
-from tests.conftest import TRACCAR, USER_A, device, mock_accumulators_update, mock_devices, mock_session
+from tests.conftest import TRACCAR, USER_A, USER_READONLY, device, mock_accumulators_update, mock_devices, mock_session
 
 
 def mock_list_maintenances(traccar_mock, items: list[dict]):
@@ -239,6 +239,66 @@ def test_pull_prunes_removed_traccar_maintenance(client, db, traccar_mock):
     client.post(f"/api/v1/vehicles/{vehicle.id}/sync-maintenance")
     db.expire_all()
     assert db.get(Reminder, reminder_id) is None
+
+
+def test_sync_maintenance_readonly_keeps_existing_reminders(client, db, traccar_mock):
+    mock_session(traccar_mock, USER_READONLY)
+    mock_devices(traccar_mock, [device(1)])
+    client.cookies.set("JSESSIONID", "user-readonly")
+
+    vehicle = Vehicle(traccar_device_id=1)
+    service_type = ServiceType(name="Oil change")
+    db.add_all([vehicle, service_type])
+    db.flush()
+    reminder = Reminder(
+        vehicle_id=vehicle.id,
+        service_type_id=service_type.id,
+        traccar_maintenance_id=99,
+        interval_km=15000,
+    )
+    db.add(reminder)
+    db.commit()
+    reminder_id = reminder.id
+
+    mock_list_maintenances(traccar_mock, [])
+
+    response = client.post(f"/api/v1/vehicles/{vehicle.id}/sync-maintenance")
+    assert response.status_code == 200
+    assert response.json()["removed"] == 0
+
+    db.expire_all()
+    assert db.get(Reminder, reminder_id) is not None
+
+
+def test_sync_maintenance_readonly_403_keeps_existing_reminders(client, db, traccar_mock):
+    mock_session(traccar_mock, USER_READONLY)
+    mock_devices(traccar_mock, [device(1)])
+    client.cookies.set("JSESSIONID", "user-readonly")
+
+    vehicle = Vehicle(traccar_device_id=1)
+    service_type = ServiceType(name="Oil change")
+    db.add_all([vehicle, service_type])
+    db.flush()
+    reminder = Reminder(
+        vehicle_id=vehicle.id,
+        service_type_id=service_type.id,
+        traccar_maintenance_id=99,
+        interval_km=15000,
+    )
+    db.add(reminder)
+    db.commit()
+    reminder_id = reminder.id
+
+    traccar_mock.get(url__regex=rf"{TRACCAR}/api/maintenances.*").mock(
+        return_value=Response(403)
+    )
+
+    response = client.post(f"/api/v1/vehicles/{vehicle.id}/sync-maintenance")
+    assert response.status_code == 200
+    assert response.json()["removed"] == 0
+
+    db.expire_all()
+    assert db.get(Reminder, reminder_id) is not None
 
 
 def test_cannot_edit_traccar_linked_reminder(client, db, traccar_mock):

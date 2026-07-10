@@ -24,7 +24,7 @@ def test_production_validation_rejects_missing_secrets():
         session_cookie_secure=True,
         cors_origins="https://fleet.example.com",
     )
-    with pytest.raises(RuntimeError, match="TRACCAR_ADMIN_TOKEN"):
+    with pytest.raises(RuntimeError, match="WEBHOOK_SECRET"):
         validate_production_settings(settings)
 
 

@@ -8,7 +8,7 @@ we store the session id in our own HttpOnly cookie (``maint_session``).
 import logging
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response, status
 
 from app.api.deps import (
     SESSION_COOKIE_NAME,
@@ -16,10 +16,12 @@ from app.api.deps import (
     CurrentUser,
     _extract_credential,
     clear_auth_caches,
+    traccar_writes_disabled,
 )
 from app.config import Settings, get_settings
 from app.schemas.auth import LoginRequest, UserResponse
-from app.services.traccar import TraccarService, TraccarUnavailable, get_traccar
+from app.services.traccar import TraccarService, TraccarUnavailable, UserCredential, get_traccar
+from app.services.user_sync import clear_user_sync_throttle, schedule_user_sync
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +43,8 @@ def _user_response(user: AuthContext) -> UserResponse:
         name=user.user.name,
         email=user.user.email,
         administrator=user.user.administrator,
+        readonly=user.user.readonly,
+        device_readonly=user.user.device_readonly,
     )
 
 
@@ -48,6 +52,7 @@ def _user_response(user: AuthContext) -> UserResponse:
 async def login(
     payload: LoginRequest,
     response: Response,
+    background_tasks: BackgroundTasks,
     traccar: Annotated[TraccarService, Depends(get_traccar)],
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> UserResponse:
@@ -68,21 +73,42 @@ async def login(
 
     user, session_id = result
     clear_auth_caches()
+    clear_user_sync_throttle()
     response.set_cookie(
         SESSION_COOKIE_NAME,
         session_id,
         **_session_cookie_kwargs(settings),
+    )
+    schedule_user_sync(
+        background_tasks,
+        traccar_user_id=int(user["id"]),
+        credential=UserCredential(session_cookie=session_id),
+        force=True,
+        prune_missing_maintenance=not (
+            bool(user.get("readonly", False)) or bool(user.get("deviceReadonly", False))
+        ),
     )
     return UserResponse(
         id=user["id"],
         name=user.get("name", ""),
         email=user.get("email", ""),
         administrator=bool(user.get("administrator", False)),
+        readonly=bool(user.get("readonly", False)),
+        device_readonly=bool(user.get("deviceReadonly", False)),
     )
 
 
 @router.get("/me", response_model=UserResponse)
-async def me(ctx: CurrentUser) -> UserResponse:
+async def me(
+    ctx: CurrentUser,
+    background_tasks: BackgroundTasks,
+) -> UserResponse:
+    schedule_user_sync(
+        background_tasks,
+        traccar_user_id=ctx.user.id,
+        credential=ctx.credential,
+        prune_missing_maintenance=not traccar_writes_disabled(ctx.user),
+    )
     return _user_response(ctx)
 
 
@@ -101,5 +127,6 @@ async def logout(
             logger.warning("Traccar unavailable during logout; clearing local session")
 
     clear_auth_caches()
+    clear_user_sync_throttle()
     response.delete_cookie(SESSION_COOKIE_NAME, **_session_cookie_kwargs(settings))
     return response

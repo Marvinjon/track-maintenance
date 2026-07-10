@@ -1,11 +1,12 @@
 """Maintenance record CRUD, pagination, and tenant isolation."""
 
 import json
+from decimal import Decimal
 
 import pytest
 
 from app.models import ServiceType, Vehicle
-from tests.conftest import USER_A, USER_B, device, mock_accumulators_update, mock_devices, mock_session
+from tests.conftest import TRACCAR, USER_A, USER_B, USER_READONLY, device, mock_accumulators_update, mock_devices, mock_session
 
 
 @pytest.fixture
@@ -68,12 +69,30 @@ def test_create_record_pushes_odometer_to_traccar(client, db, traccar_mock, vehi
 
     assert response.status_code == 201
     assert accumulators.call_count == 1
+    cookie_header = accumulators.calls.last.request.headers.get("cookie", "")
+    assert "JSESSIONID=user-1" in cookie_header
     payload = json.loads(accumulators.calls.last.request.content)
     assert payload == {"deviceId": 1, "totalDistance": 123_456_800.0}
 
     db.refresh(vehicle)
     assert float(vehicle.odometer_km_cached) == 123456.8
     assert vehicle.odometer_synced_at is not None
+
+
+def test_create_record_readonly_user_forbidden(
+    client, db, traccar_mock, vehicle, service_type_id
+):
+    _login(client, traccar_mock, user=USER_READONLY)
+    response = client.post(
+        f"/api/v1/vehicles/{vehicle.id}/records",
+        json={
+            "service_type_id": service_type_id,
+            "performed_at": "2026-07-01",
+            "odometer_km": "123456.8",
+        },
+    )
+    assert response.status_code == 403
+    assert "permission" in response.json()["detail"].lower()
 
 
 def test_create_record_unknown_service_type_422(client, traccar_mock, vehicle):

@@ -33,12 +33,13 @@ async def find_manager_user_id(
     user_id: int,
 ) -> int | None:
     """Return the Traccar manager for a managed user, or None if standalone."""
-    for client in (traccar.as_user(credential), traccar.as_admin()):
-        links = await client.list_permissions(managedUserId=user_id, userId=0)
-        for link in links:
-            manager_id = link.get("userId")
-            if isinstance(manager_id, int) and manager_id != user_id:
-                return manager_id
+    links = await traccar.as_user(credential).list_permissions(
+        managedUserId=user_id, userId=0
+    )
+    for link in links:
+        manager_id = link.get("userId")
+        if isinstance(manager_id, int) and manager_id != user_id:
+            return manager_id
     return None
 
 

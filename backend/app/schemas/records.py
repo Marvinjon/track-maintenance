@@ -57,6 +57,7 @@ class RecordOut(BaseModel):
     created_by_traccar_user_id: int
     created_at: datetime
     parts: list[RecordPartOut] = []
+    traccar_sync_warning_code: str | None = None
 
 
 class RecordListResponse(BaseModel):

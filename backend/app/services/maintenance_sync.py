@@ -1,4 +1,4 @@
-"""Pull Traccar maintenance schedules into local reminders (admin token).
+"""Pull Traccar maintenance schedules into local reminders.
 
 Traccar is the source of truth for schedule definitions. Local-only reminders
 (traccar_maintenance_id IS NULL) are never modified by this sync.
@@ -14,7 +14,14 @@ from sqlalchemy.orm import Session
 from app.models import Reminder, ServiceType, Vehicle
 from app.services.odometer_sync import compute_reminder_status
 from app.services.reminders import push_traccar_maintenance_start
-from app.services.traccar import TraccarService, meters_to_km, ms_to_hours
+from app.services.traccar import (
+    TraccarService,
+    TraccarPermissionDenied,
+    TraccarUnavailable,
+    UserCredential,
+    meters_to_km,
+    ms_to_hours,
+)
 from app.services.tenant_scope import vehicle_catalog_tenant
 from app.services.traccar_maintenance_types import (
     DISTANCE_MAINTENANCE_TYPES,
@@ -125,14 +132,39 @@ def _apply_traccar_maintenance(
 
 
 async def sync_vehicle_maintenances(
-    db: Session, vehicle: Vehicle, traccar: TraccarService
+    db: Session,
+    vehicle: Vehicle,
+    traccar: TraccarService,
+    credential: UserCredential | None = None,
+    *,
+    prune_missing: bool = True,
 ) -> MaintenanceSyncResult:
     """Pull Traccar maintenance entities for one vehicle into local reminders."""
     result = MaintenanceSyncResult()
     if vehicle.archived:
         return result
+    if credential is not None:
+        client = traccar.as_user(credential)
+    elif traccar.has_admin_token:
+        client = traccar.as_admin()
+    else:
+        return result
 
-    maintenances = await traccar.as_admin().list_maintenances(vehicle.traccar_device_id)
+    try:
+        maintenances = await client.list_maintenances(vehicle.traccar_device_id)
+    except TraccarPermissionDenied:
+        logger.info(
+            "Skipping maintenance sync for vehicle %s: caller cannot list Traccar schedules",
+            vehicle.id,
+        )
+        return result
+    except TraccarUnavailable:
+        logger.warning(
+            "Skipping maintenance sync for vehicle %s: Traccar maintenance list failed",
+            vehicle.id,
+        )
+        return result
+
     seen_ids: set[int] = set()
 
     existing_by_traccar_id: dict[int, Reminder] = {
@@ -148,7 +180,7 @@ async def sync_vehicle_maintenances(
 
     for reminder in existing_by_traccar_id.values():
         if reminder.sync_error:
-            await push_traccar_maintenance_start(traccar, reminder)
+            await push_traccar_maintenance_start(traccar, reminder, credential)
 
     for maintenance in maintenances:
         traccar_id = maintenance.get("id")
@@ -208,58 +240,18 @@ async def sync_vehicle_maintenances(
         elif _reminder_snapshot(reminder) != before:
             result.updated += 1
 
-    for traccar_id, reminder in list(existing_by_traccar_id.items()):
-        if traccar_id not in seen_ids:
-            db.delete(reminder)
-            result.removed += 1
+    if prune_missing:
+        for traccar_id, reminder in list(existing_by_traccar_id.items()):
+            if traccar_id not in seen_ids:
+                db.delete(reminder)
+                result.removed += 1
+    elif existing_by_traccar_id:
+        missing = [tid for tid in existing_by_traccar_id if tid not in seen_ids]
+        if missing:
+            logger.info(
+                "Skipping maintenance prune for vehicle %s: caller has limited Traccar access (%d schedules not returned)",
+                vehicle.id,
+                len(missing),
+            )
 
     return result
-
-
-async def sync_all_vehicle_maintenances(
-    db: Session, traccar: TraccarService
-) -> MaintenanceSyncResult:
-    """Pull Traccar maintenance for every non-archived vehicle."""
-    totals = MaintenanceSyncResult()
-    vehicles = (
-        db.execute(select(Vehicle).where(Vehicle.archived.is_(False))).scalars().all()
-    )
-    for vehicle in vehicles:
-        try:
-            result = await sync_vehicle_maintenances(db, vehicle, traccar)
-            totals.synced += result.synced
-            totals.created += result.created
-            totals.updated += result.updated
-            totals.removed += result.removed
-            totals.skipped += result.skipped
-        except Exception:
-            logger.exception(
-                "Maintenance sync failed for vehicle %s (device %s)",
-                vehicle.id,
-                vehicle.traccar_device_id,
-            )
-    db.commit()
-    return totals
-
-
-async def run_scheduled_maintenance_sync() -> None:
-    """Entry point for the APScheduler job (owns its DB session)."""
-    from app.db import SessionLocal
-    from app.services.traccar import get_traccar
-
-    db = SessionLocal()
-    try:
-        totals = await sync_all_vehicle_maintenances(db, get_traccar())
-        logger.info(
-            "Scheduled maintenance sync completed: %d synced, %d created, "
-            "%d updated, %d removed, %d skipped",
-            totals.synced,
-            totals.created,
-            totals.updated,
-            totals.removed,
-            totals.skipped,
-        )
-    except Exception:
-        logger.exception("Scheduled maintenance sync failed")
-    finally:
-        db.close()

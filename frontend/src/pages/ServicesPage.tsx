@@ -27,6 +27,7 @@ import { formatCost, formatKm } from "../format";
 import { useSettingsStyles } from "../styles/useSettingsStyles";
 import type { Strings } from "../i18n";
 import { useCurrency } from "../hooks/useCurrency";
+import { isTraccarReadOnly, useAuthUser } from "../hooks/useAuthUser";
 import { useStrings } from "../hooks/useLocale";
 
 function vehicleDisplay(strings: Strings, record: MaintenanceRecordWithVehicle): string {
@@ -40,6 +41,8 @@ function vehicleDisplay(strings: Strings, record: MaintenanceRecordWithVehicle):
 export default function ServicesPage() {
   const strings = useStrings();
   const { currency: preferredCurrency } = useCurrency();
+  const { data: authUser } = useAuthUser();
+  const readOnly = isTraccarReadOnly(authUser);
   const { classes } = useSettingsStyles();
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedRecord, setSelectedRecord] = useState<MaintenanceRecordWithVehicle | null>(
@@ -79,7 +82,12 @@ export default function ServicesPage() {
             sheets={async () => [recordsExportSheet(strings, await fetchAllRecords())]}
             disabled={data.total === 0}
           />
-          <Button variant="contained" onClick={() => setModalOpen(true)}>
+          <Button
+            variant="contained"
+            onClick={() => setModalOpen(true)}
+            disabled={readOnly}
+            title={readOnly ? strings.logService.noTraccarPermission : undefined}
+          >
             {strings.services.newService}
           </Button>
         </Box>

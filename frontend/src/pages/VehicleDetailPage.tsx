@@ -37,6 +37,7 @@ import {
   vehicleRecordsExportSheet,
 } from "../export/datasets";
 import { formatAgo, formatCost, formatKm } from "../format";
+import { isTraccarReadOnly, useAuthUser } from "../hooks/useAuthUser";
 import { traccarDeviceUrl, useTraccarPublicUrl } from "../hooks/useTraccarUrl";
 import { useSettingsStyles } from "../styles/useSettingsStyles";
 import { useStrings } from "../hooks/useLocale";
@@ -47,6 +48,8 @@ function RecordsTab({ vehicle }: { vehicle: VehicleDetail }) {
   const confirm = useConfirm();
   const queryClient = useQueryClient();
   const { classes } = useSettingsStyles();
+  const { data: authUser } = useAuthUser();
+  const readOnly = isTraccarReadOnly(authUser);
   const [modalOpen, setModalOpen] = useState(false);
   const [limit, setLimit] = useState(20);
 
@@ -78,13 +81,20 @@ function RecordsTab({ vehicle }: { vehicle: VehicleDetail }) {
             ]}
           />
         )}
-        <Button
-          variant="contained"
-          onClick={() => setModalOpen(true)}
-          disabled={vehicle.archived}
+        <Tooltip
+          title={readOnly ? strings.logService.noTraccarPermission : ""}
+          disableHoverListener={!readOnly}
         >
-          {strings.vehicleDetail.logService}
-        </Button>
+          <span>
+            <Button
+              variant="contained"
+              onClick={() => setModalOpen(true)}
+              disabled={vehicle.archived || readOnly}
+            >
+              {strings.vehicleDetail.logService}
+            </Button>
+          </span>
+        </Tooltip>
       </Box>
 
       {isLoading && <Typography>{strings.common.loading}</Typography>}

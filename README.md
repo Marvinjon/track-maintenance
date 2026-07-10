@@ -43,11 +43,15 @@ FLUSH PRIVILEGES;
 
 Grant only on `track_maintenance` — never on Traccar's schema.
 
-### 2. Traccar admin token
+### 2. Traccar admin token (optional)
+
+Users log in with their own Traccar email/password or API token — no server-side admin token is required for vehicle list, odometer sync, catalog scoping, or pushing service data back to Traccar.
+
+Set `TRACCAR_ADMIN_TOKEN` only if you want maintenance email notifications:
 
 1. Log in to Traccar as an administrator.
 2. Account settings → generate an API token.
-3. Set `TRACCAR_ADMIN_TOKEN` in `.env` (background jobs only — not for user auth).
+3. Set `TRACCAR_ADMIN_TOKEN` in `.env`.
 
 ### 3. Event forwarding
 
@@ -64,7 +68,8 @@ Use the same secret as `WEBHOOK_SECRET` in `.env` (`openssl rand -hex 32`).
 
 ```bash
 cp .env.example .env
-# Fill in DATABASE_URL, TRACCAR_ADMIN_TOKEN, WEBHOOK_SECRET, CORS_ORIGINS, APP_ENV=production
+# Fill in DATABASE_URL, WEBHOOK_SECRET, CORS_ORIGINS, APP_ENV=production
+# TRACCAR_ADMIN_TOKEN is optional — see step 2 above
 chmod 600 .env
 ```
 
@@ -153,7 +158,7 @@ For Traccar deep links ("View in Traccar"), set `TRACCAR_PUBLIC_URL` in the back
 | `DATABASE_URL` | e.g. `mysql+pymysql://maint_user:***@127.0.0.1:3306/track_maintenance` |
 | `TRACCAR_URL` | Internal Traccar URL, usually `http://127.0.0.1:8082` |
 | `TRACCAR_PUBLIC_URL` | User-facing Traccar URL for deep links (optional) |
-| `TRACCAR_ADMIN_TOKEN` | Admin token for background sync jobs only |
+| `TRACCAR_ADMIN_TOKEN` | Optional — enables maintenance email notifications |
 | `WEBHOOK_SECRET` | Shared secret for Traccar event forwarding |
 | `BIND_HOST` / `BIND_PORT` | Uvicorn bind address (`127.0.0.1:8000` in production) |
 | `CORS_ORIGINS` | Comma-separated allowed origins |
@@ -166,7 +171,7 @@ Full list: [.env.example](.env.example).
 - **Auth:** Users sign in with Traccar email/password. The backend validates against Traccar and issues a `maint_session` cookie.
 - **Devices:** Vehicle visibility matches Traccar — user A never sees user B's devices.
 - **Reminders:** Traccar maintenance schedules are pulled every 30 minutes (and on demand). Traccar-linked reminders are read-only in this app; local-only reminders are also supported.
-- **Odometer:** Pulled from Traccar on a schedule and on demand.
+- **Odometer & maintenance:** Refreshed in the background when each user logs in or restores their session (and on demand per vehicle).
 - **Webhooks:** Traccar `event.forward` marks reminders overdue; the webhook must stay localhost-only (Nginx returns 403 externally).
 
 ## Development

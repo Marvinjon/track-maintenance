@@ -14,7 +14,13 @@ from sqlalchemy.orm import Session
 from app.models import Reminder, ServiceType, Vehicle
 from app.services.odometer_sync import compute_reminder_status
 from app.services.tenant_scope import catalog_visibility_filter, vehicle_catalog_tenant
-from app.services.traccar import TraccarService, hours_to_ms, km_to_meters
+from app.services.traccar import (
+    TraccarService,
+    TraccarPermissionDenied,
+    UserCredential,
+    hours_to_ms,
+    km_to_meters,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -50,9 +56,10 @@ def _maintenance_payload_hours(
 async def push_traccar_maintenance_start(
     traccar: TraccarService,
     reminder: Reminder,
+    credential: UserCredential | None = None,
 ) -> None:
     """Push updated start baseline to an existing Traccar maintenance entity."""
-    if reminder.traccar_maintenance_id is None:
+    if reminder.traccar_maintenance_id is None or credential is None:
         return
 
     maintenance_name = reminder.traccar_maintenance_name
@@ -66,11 +73,13 @@ async def push_traccar_maintenance_start(
         return
 
     try:
-        await traccar.as_admin().update_maintenance(
+        await traccar.as_user(credential).update_maintenance(
             reminder.traccar_maintenance_id,
             {"id": reminder.traccar_maintenance_id, **payload},
         )
         reminder.sync_error = False
+    except TraccarPermissionDenied:
+        raise
     except Exception:
         logger.exception(
             "Failed to reset Traccar maintenance %s for reminder %s",
@@ -87,6 +96,7 @@ async def reset_reminders_after_service(
     service_type_id: int,
     performed_at,
     odometer_km: Decimal | None,
+    credential: UserCredential,
 ) -> None:
     """After a service record is logged: update last_service_* and reset Traccar start."""
     reminders = (
@@ -110,7 +120,11 @@ async def reset_reminders_after_service(
             reminder.last_service_engine_hours = vehicle.engine_hours_cached
         reminder.status = compute_reminder_status(reminder, vehicle)
         if reminder.traccar_maintenance_id is not None:
-            await push_traccar_maintenance_start(traccar, reminder)
+            try:
+                await push_traccar_maintenance_start(traccar, reminder, credential)
+            except TraccarPermissionDenied:
+                reminder.sync_error = True
+                raise
 
 
 async def create_default_reminders(

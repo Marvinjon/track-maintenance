@@ -20,6 +20,9 @@ from app.api.deps import clear_auth_caches
 from app.db import get_db
 from app.main import app
 from app.models import Base
+from app.services.user_sync import clear_user_sync_throttle
+
+import app.db as db_module
 
 TRACCAR = "http://traccar.test"
 
@@ -53,8 +56,14 @@ app.dependency_overrides[get_db] = override_get_db
 def clean_state():
     Base.metadata.create_all(engine)
     clear_auth_caches()
-    yield
-    Base.metadata.drop_all(engine)
+    clear_user_sync_throttle()
+    original_session_local = db_module.SessionLocal
+    db_module.SessionLocal = TestingSessionLocal
+    try:
+        yield
+    finally:
+        db_module.SessionLocal = original_session_local
+        Base.metadata.drop_all(engine)
 
 
 @pytest.fixture
@@ -88,7 +97,15 @@ USER_B = {"id": 2, "name": "User B", "email": "b@example.com", "administrator": 
 USER_MANAGER = {"id": 10, "name": "Manager M", "email": "m@example.com", "administrator": False, "userLimit": 10}
 USER_A_MANAGED = {"id": 11, "name": "User A2", "email": "a2@example.com", "administrator": False, "userLimit": 0}
 USER_OTHER_MANAGER = {"id": 20, "name": "Manager N", "email": "n@example.com", "administrator": False, "userLimit": 10}
-USER_OTHER = {"id": 21, "name": "User C", "email": "c@example.com", "administrator": False, "userLimit": 0}
+USER_READONLY = {
+    "id": 3,
+    "name": "Read Only",
+    "email": "readonly@example.com",
+    "administrator": False,
+    "userLimit": 0,
+    "readonly": True,
+    "deviceReadonly": False,
+}
 
 
 def mock_managed_user(mock: respx.MockRouter, manager_id: int, user_id: int):
@@ -134,7 +151,7 @@ def device(device_id: int, name: str = "Truck") -> dict:
 
 
 def mock_positions(mock: respx.MockRouter, positions_by_device: dict[int, list[dict]]):
-    """Mock GET /api/positions?deviceId= (admin token)."""
+    """Mock GET /api/positions?deviceId=."""
 
     def responder(request):
         device_id = int(request.url.params["deviceId"])

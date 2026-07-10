@@ -59,6 +59,8 @@ def _ctx(user: dict, tenant_user_id: int | None = None) -> AuthContext:
             email=user["email"],
             administrator=user["administrator"],
             user_limit=int(user.get("userLimit", 0)),
+            readonly=bool(user.get("readonly", False)),
+            device_readonly=bool(user.get("deviceReadonly", False)),
         ),
         credential=UserCredential(session_cookie=f"cookie-{uid}"),
         tenant_user_id=tenant_user_id,

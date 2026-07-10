@@ -17,6 +17,7 @@ import { RecordDrawer } from "../components/RecordDrawer";
 import { formatCost } from "../format";
 import type { Strings } from "../i18n";
 import { useCurrency } from "../hooks/useCurrency";
+import { isTraccarReadOnly, useAuthUser } from "../hooks/useAuthUser";
 import { useStrings } from "../hooks/useLocale";
 
 function vehicleDisplay(strings: Strings, record: DashboardRecord): string {
@@ -70,6 +71,8 @@ function StatCard({
 export default function DashboardPage() {
   const strings = useStrings();
   const { currency: preferredCurrency } = useCurrency();
+  const { data: authUser } = useAuthUser();
+  const readOnly = isTraccarReadOnly(authUser);
   const [logServiceOpen, setLogServiceOpen] = useState(false);
   const [selectedRecord, setSelectedRecord] = useState<DashboardRecord | null>(null);
   const { data, isLoading, isError } = useQuery({
@@ -89,7 +92,12 @@ export default function DashboardPage() {
     <>
       <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
         <Typography variant="h5">{strings.dashboard.title}</Typography>
-        <Button variant="contained" onClick={() => setLogServiceOpen(true)}>
+        <Button
+          variant="contained"
+          onClick={() => setLogServiceOpen(true)}
+          disabled={readOnly}
+          title={readOnly ? strings.logService.noTraccarPermission : undefined}
+        >
           {strings.vehicleDetail.logService}
         </Button>
       </Stack>

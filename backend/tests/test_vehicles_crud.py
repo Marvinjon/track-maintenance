@@ -203,7 +203,7 @@ def test_sync_odometer_falls_back_to_odometer_attribute(client, db, traccar_mock
     assert float(response.json()["odometer_km_cached"]) == 50000.0
 
 
-def test_sync_odometer_uses_admin_token(client, db, traccar_mock):
+def test_sync_odometer_uses_user_credential(client, db, traccar_mock):
     _login(client, traccar_mock, [device(1)])
     vehicle = Vehicle(traccar_device_id=1)
     db.add(vehicle)
@@ -215,8 +215,9 @@ def test_sync_odometer_uses_admin_token(client, db, traccar_mock):
 
     client.post(f"/api/v1/vehicles/{vehicle.id}/sync-odometer")
 
-    auth_header = positions_route.calls.last.request.headers.get("authorization")
-    assert auth_header == "Bearer admin-test-token"
+    cookie_header = positions_route.calls.last.request.headers.get("cookie", "")
+    assert "JSESSIONID=user-a" in cookie_header
+    assert positions_route.calls.last.request.headers.get("authorization") is None
 
 
 def test_sync_odometer_no_position_404(client, db, traccar_mock):
