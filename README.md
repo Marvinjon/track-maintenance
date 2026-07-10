@@ -13,6 +13,7 @@ Open-source companion service for [Traccar](https://www.traccar.org/) GPS fleet 
 - Service reminders synced with Traccar maintenance entities
 - Fleet-wide views, CSV export, cost reports, and dashboard
 - Multi-tenant auth via Traccar credentials (session cookie or API token)
+- **Live demo** — [try it online](https://marvinjon.github.io/track-maintenance/) (built from the [`demo`](../../tree/demo) branch)
 - **White-label ready** — custom app title, logo, favicon, and primary color at build time
 
 ## Stack
