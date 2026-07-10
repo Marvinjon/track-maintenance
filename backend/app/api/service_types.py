@@ -4,15 +4,16 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.api.deps import CurrentUser
+from app.api.deps import CurrentUser, require_traccar_write_access
 from app.api.records import parts_by_record, _to_out as record_to_out
 from app.db import get_db
-from app.models import MaintenanceRecord, ServiceType, Vehicle
+from app.models import MaintenanceRecord, Reminder, ServiceType, Vehicle
 from app.schemas.records import FleetRecordListResponse, RecordWithVehicleOut
 from app.schemas.service_types import ServiceTypeCreate, ServiceTypeOut, ServiceTypeUpdate
 from app.schemas.importing import ImportResult, ImportRowError, ServiceTypeImportRequest
 from app.services.serialization import service_type_to_out
 from app.services.tenant_scope import (
+    assert_catalog_deletable,
     assert_catalog_visible,
     catalog_visibility_filter,
     create_tenant_id,
@@ -182,6 +183,36 @@ async def update_service_type(
     db.commit()
     db.refresh(service_type)
     return service_type_to_out(service_type)
+
+
+@router.delete("/{service_type_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_service_type(
+    service_type_id: int,
+    ctx: CurrentUser,
+    db: Annotated[Session, Depends(get_db)],
+) -> None:
+    require_traccar_write_access(ctx)
+    service_type = _get_service_type(db, service_type_id, ctx)
+    assert_catalog_deletable(service_type, ctx.tenant_user_id)
+
+    record_count = db.execute(
+        select(func.count())
+        .select_from(MaintenanceRecord)
+        .where(MaintenanceRecord.service_type_id == service_type_id)
+    ).scalar_one()
+    reminder_count = db.execute(
+        select(func.count())
+        .select_from(Reminder)
+        .where(Reminder.service_type_id == service_type_id)
+    ).scalar_one()
+    if record_count > 0 or reminder_count > 0:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Service type is in use by maintenance records or reminders",
+        )
+
+    db.delete(service_type)
+    db.commit()
 
 
 @router.get("/{service_type_id}/records", response_model=FleetRecordListResponse)

@@ -295,6 +295,7 @@ export const en = {
     editDefaults: "Default intervals",
     recordCount: (count: number) =>
       count === 1 ? "1 record" : `${count.toLocaleString("en-GB")} records`,
+    deleteConfirm: "Delete this service type? This cannot be undone.",
   },
   reports: {
     title: "Cost reports",

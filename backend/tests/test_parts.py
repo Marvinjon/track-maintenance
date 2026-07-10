@@ -97,6 +97,19 @@ def test_archive_part_hides_from_list(logged_in):
     assert archived[0]["archived"] is True
 
 
+def test_archive_part_readonly_forbidden(client, traccar_mock):
+    from tests.conftest import USER_READONLY, mock_session
+
+    mock_session(traccar_mock, USER_A)
+    mock_devices(traccar_mock, [])
+    client.cookies.set("JSESSIONID", "user-a")
+    part = _create_part(client)
+
+    mock_session(traccar_mock, USER_READONLY)
+    client.cookies.set("JSESSIONID", "user-readonly")
+    assert client.delete(f"/api/v1/parts/{part['id']}").status_code == 403
+
+
 def test_low_stock_endpoint(logged_in):
     low = _create_part(logged_in, name="Brake pads", sku="BP-1", min_stock="4")
     ok = _create_part(logged_in, name="Wiper blade", sku="WB-1", min_stock="1")

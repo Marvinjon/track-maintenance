@@ -1,4 +1,5 @@
 import CloseIcon from "@mui/icons-material/Close";
+import DeleteIcon from "@mui/icons-material/Delete";
 import {
   Box,
   Button,
@@ -20,6 +21,8 @@ import { api } from "../api/client";
 import type { MaintenanceRecordWithVehicle, ServiceType } from "../api/types";
 import { fetchAllServiceTypeRecords, recordsExportSheet } from "../export/datasets";
 import { formatCost, formatKm } from "../format";
+import { useConfirm } from "../hooks/useConfirm";
+import { isTraccarReadOnly, useAuthUser } from "../hooks/useAuthUser";
 import { useSettingsStyles } from "../styles/useSettingsStyles";
 import type { Strings } from "../i18n";
 import { useStrings } from "../hooks/useLocale";
@@ -44,7 +47,10 @@ export function ServiceTypeDrawer({
   onRecordClick?: (record: MaintenanceRecordWithVehicle) => void;
 }) {
   const strings = useStrings();
+  const confirm = useConfirm();
   const queryClient = useQueryClient();
+  const { data: authUser } = useAuthUser();
+  const readOnly = isTraccarReadOnly(authUser);
   const { classes } = useSettingsStyles();
   const open = serviceType !== null;
   const [limit, setLimit] = useState(20);
@@ -84,6 +90,14 @@ export function ServiceTypeDrawer({
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["service-types"] });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: () => api.deleteServiceType(serviceType!.id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["service-types"] });
+      onClose();
     },
   });
 
@@ -149,6 +163,23 @@ export function ServiceTypeDrawer({
             >
               {strings.common.save}
             </Button>
+
+            {!readOnly && (
+              <Button
+                variant="outlined"
+                color="error"
+                startIcon={<DeleteIcon />}
+                disabled={deleteMutation.isPending}
+                onClick={async () => {
+                  if (await confirm(strings.serviceTypes.deleteConfirm)) {
+                    deleteMutation.mutate();
+                  }
+                }}
+                sx={{ alignSelf: "flex-start" }}
+              >
+                {strings.common.delete}
+              </Button>
+            )}
 
             <Divider />
             <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>

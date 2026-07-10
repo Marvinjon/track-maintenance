@@ -1,4 +1,5 @@
 import CloseIcon from "@mui/icons-material/Close";
+import DeleteIcon from "@mui/icons-material/Delete";
 import {
   Box,
   Button,
@@ -24,6 +25,8 @@ import { useState } from "react";
 import { api } from "../api/client";
 import type { MovementCreatePayload, Part } from "../api/types";
 import { fetchAllMovements, movementsExportSheet } from "../export/datasets";
+import { useConfirm } from "../hooks/useConfirm";
+import { isTraccarReadOnly, useAuthUser } from "../hooks/useAuthUser";
 import { useSettingsStyles } from "../styles/useSettingsStyles";
 import { useStrings } from "../hooks/useLocale";
 import { TableExportButton } from "./TableExportButton";
@@ -108,12 +111,25 @@ function AddMovementForm({ part }: { part: Part }) {
 
 export function PartDrawer({ part, onClose }: { part: Part | null; onClose: () => void }) {
   const strings = useStrings();
+  const confirm = useConfirm();
+  const queryClient = useQueryClient();
+  const { data: authUser } = useAuthUser();
+  const readOnly = isTraccarReadOnly(authUser);
   const [limit, setLimit] = useState(20);
   const { classes } = useSettingsStyles();
   const { data } = useQuery({
     queryKey: ["movements", part?.id, limit],
     queryFn: () => api.getMovements(part!.id, limit, 0),
     enabled: part !== null,
+  });
+
+  const archiveMutation = useMutation({
+    mutationFn: () => api.archivePart(part!.id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["parts"] });
+      queryClient.invalidateQueries({ queryKey: ["low-stock"] });
+      onClose();
+    },
   });
 
   return (
@@ -197,6 +213,23 @@ export function PartDrawer({ part, onClose }: { part: Part | null; onClose: () =
             {data && data.total > data.items.length && (
               <Button variant="text" onClick={() => setLimit((l) => l + 20)}>
                 {strings.ledger.loadMore}
+              </Button>
+            )}
+
+            {!readOnly && (
+              <Button
+                variant="outlined"
+                color="error"
+                startIcon={<DeleteIcon />}
+                disabled={archiveMutation.isPending}
+                onClick={async () => {
+                  if (await confirm(strings.parts.archiveConfirm)) {
+                    archiveMutation.mutate();
+                  }
+                }}
+                sx={{ alignSelf: "flex-start" }}
+              >
+                {strings.parts.archive}
               </Button>
             )}
           </Stack>

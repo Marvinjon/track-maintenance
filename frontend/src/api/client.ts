@@ -168,6 +168,8 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify(payload),
     }),
+  deleteServiceType: (serviceTypeId: number) =>
+    request<void>(`/service-types/${serviceTypeId}`, { method: "DELETE" }),
   getServiceTypeRecords: (serviceTypeId: number, limit = 20, offset = 0) =>
     request<FleetRecordListResponse>(
       `/service-types/${serviceTypeId}/records?limit=${limit}&offset=${offset}`,

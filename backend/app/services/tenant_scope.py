@@ -110,6 +110,17 @@ def assert_catalog_visible(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=detail)
 
 
+def assert_catalog_deletable(
+    entity: ServiceType | Part,
+    tenant_user_id: int | None,
+    *,
+    detail: str = "Cannot delete shared default catalog entries",
+) -> None:
+    """Raise 403 when a non-admin tries to delete a global default catalog row."""
+    if entity.traccar_tenant_user_id is None and tenant_user_id is not None:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=detail)
+
+
 def get_service_type(
     db: Session,
     service_type_id: int,

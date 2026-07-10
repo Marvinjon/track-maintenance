@@ -298,6 +298,7 @@ export const is = {
     editDefaults: "Sjálfgefin bil",
     recordCount: (count: number) =>
       count === 1 ? "1 færsla" : `${count.toLocaleString("is-IS")} færslur`,
+    deleteConfirm: "Eyða þessari þjónustutegund? Ekki er hægt að afturkalla.",
   },
   reports: {
     title: "Kostnaðarskýrslur",

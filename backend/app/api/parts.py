@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.api.deps import CurrentUser
+from app.api.deps import CurrentUser, require_traccar_write_access
 from app.db import get_db
 from app.models import Part, StockMovement, StockMovementReason
 from app.schemas.parts import (
@@ -19,6 +19,7 @@ from app.schemas.parts import (
 from app.schemas.importing import ImportResult, ImportRowError, PartImportRequest
 from app.services.stock import add_movement, current_stock_map
 from app.services.tenant_scope import (
+    assert_catalog_deletable,
     assert_catalog_visible,
     catalog_visibility_filter,
     create_tenant_id,
@@ -202,7 +203,9 @@ async def archive_part(
     db: Annotated[Session, Depends(get_db)],
 ) -> None:
     """Soft archive — the ledger history is kept."""
+    require_traccar_write_access(ctx)
     part = _get_part(db, part_id, ctx)
+    assert_catalog_deletable(part, ctx.tenant_user_id)
     part.archived = True
     db.commit()
 
