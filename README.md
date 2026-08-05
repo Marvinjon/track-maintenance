@@ -1,6 +1,6 @@
 # Track Maintenance
 
-Open-source companion service for [Traccar](https://www.traccar.org/) GPS fleet tracking. Adds vehicle maintenance logs, spare-parts inventory, service reminders, and cost reports — without modifying Traccar itself. All integration uses Traccar's REST API and `event.forward` webhooks.
+Open-source companion service for [Traccar](https://www.traccar.org/) GPS fleet tracking. Adds vehicle maintenance logs, spare-parts inventory, service reminders, and cost reports - without modifying Traccar itself. All integration uses Traccar's REST API and `event.forward` webhooks.
 
 **License:** [Apache License 2.0](LICENSE) (same as Traccar).
 
@@ -13,8 +13,8 @@ Open-source companion service for [Traccar](https://www.traccar.org/) GPS fleet 
 - Service reminders synced with Traccar maintenance entities
 - Fleet-wide views, CSV export, cost reports, and dashboard
 - Multi-tenant auth via Traccar credentials (session cookie or API token)
-- **Live demo** — [try it online](https://marvinjon.github.io/track-maintenance/) (built from the [`demo`](../../tree/demo) branch; auto-synced on every `main` push)
-- **White-label ready** — custom app title, logo, favicon, and primary color at build time
+- **Live demo** - [try it online](https://marvinjon.github.io/track-maintenance/) (built from the [`demo`](../../tree/demo) branch; auto-synced on every `main` push)
+- **White-label ready** - custom app title, logo, favicon, and primary color at build time
 
 ## Stack
 
@@ -42,7 +42,7 @@ GRANT ALL PRIVILEGES ON track_maintenance.* TO 'maint_user'@'localhost';
 FLUSH PRIVILEGES;
 ```
 
-Grant only on `track_maintenance` — never on Traccar's schema.
+Grant only on `track_maintenance` - never on Traccar's schema.
 
 ### 2. Event forwarding
 
@@ -85,7 +85,7 @@ sudo cp -r dist/* /var/www/fleet/
 
 Install the vhost from [deploy/nginx.conf.example](deploy/nginx.conf.example) and reload Nginx.
 
-Both backend and frontend must be deployed on upgrades — rebuilding Docker does not update static files.
+Both backend and frontend must be deployed on upgrades - rebuilding Docker does not update static files.
 
 ## Upgrading an existing deployment
 
@@ -93,14 +93,14 @@ From the repo root on the production host:
 
 1. **Pull** the new release (`git pull` or unpack the new tarball).
 2. **Review** `.env.example` for any new variables; update `.env` if needed (do not overwrite secrets).
-3. **Backend** — rebuild, migrate, restart:
+3. **Backend** - rebuild, migrate, restart:
    ```bash
    docker compose build
    docker compose run --rm backend alembic upgrade head
    docker compose up -d
    ```
    Migrations are **not** run on container start; `alembic upgrade head` is required after every release that adds schema changes.
-4. **Frontend** — rebuild and copy static files to the Nginx docroot:
+4. **Frontend** - rebuild and copy static files to the Nginx docroot:
    ```bash
    cd frontend
    npm ci
@@ -108,7 +108,7 @@ From the repo root on the production host:
    sudo cp -r dist/* /var/www/fleet/
    ```
    If you use white-label env vars, source `frontend/.env.branding` before `npm run build` (see [White-labeling](#white-labeling)).
-5. **Verify** — `curl -s http://127.0.0.1:8000/api/v1/health` should report database and Traccar OK; reload Nginx if you changed its config (`sudo nginx -t && sudo systemctl reload nginx`).
+5. **Verify** - `curl -s http://127.0.0.1:8000/api/v1/health` should report database and Traccar OK; reload Nginx if you changed its config (`sudo nginx -t && sudo systemctl reload nginx`).
 
 Traccar itself does not need to be restarted for Track Maintenance upgrades.
 
@@ -158,14 +158,14 @@ Full list: [.env.example](.env.example).
 ## Traccar integration
 
 - **Auth:** Users sign in with Traccar email/password. The backend validates against Traccar and issues a `maint_session` cookie.
-- **Devices:** Vehicle visibility matches Traccar — user A never sees user B's devices.
+- **Devices:** Vehicle visibility matches Traccar - user A never sees user B's devices.
 - **Reminders:** Traccar maintenance schedules are pulled on demand and in the background when each user logs in or restores their session. Traccar-linked reminders are read-only in this app; local-only reminders are also supported.
 - **Odometer & maintenance:** Refreshed in the background when each user logs in or restores their session (and on demand per vehicle).
 - **Webhooks:** Traccar `event.forward` marks reminders overdue; the webhook must stay localhost-only (Nginx returns 403 externally).
 
 ## Development
 
-Local dev needs **Traccar** for login and device data. **MySQL starts automatically** via Docker — you do not need a local MySQL install for development.
+Local dev needs **Traccar** for login and device data. **MySQL starts automatically** via Docker - you do not need a local MySQL install for development.
 
 ### Quick start (recommended)
 
@@ -201,7 +201,7 @@ MySQL runs in Docker on **`127.0.0.1:3307`** (port 3307 avoids clashing with nat
 
 ### Tests
 
-Pytest mocks Traccar and uses in-memory SQLite — no Docker required:
+Pytest mocks Traccar and uses in-memory SQLite - no Docker required:
 
 ```bash
 cd backend && .venv/bin/python -m pytest
@@ -233,7 +233,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for PR guidelines.
 |---------|--------------|
 | `502` on `/auth/me` | Traccar down or wrong `TRACCAR_URL` |
 | `401` after login | Cookie `secure` flag vs HTTP dev; check `SESSION_COOKIE_SECURE` |
-| DB errors | Wrong `DATABASE_URL` or migrations not applied — run `./scripts/dev-db.sh migrate` |
+| DB errors | Wrong `DATABASE_URL` or migrations not applied - run `./scripts/dev-db.sh migrate` |
 | CORS in dev | Add `http://localhost:5173` to `CORS_ORIGINS`, or use Vite proxy |
 
 ## Project status
